@@ -50,9 +50,53 @@
 - ✅ Transcription history integration
 
 **Keyboard Shortcuts**:
-- **Cmd+Opt+Z**: WhisperKit audio recording (offline)
+- **Cmd+Opt+Z**: OpenAI Realtime audio recording (cloud, primary)
+- **Cmd+Opt+Y**: WhisperKit audio recording (offline/local)
 - **Cmd+Opt+X**: Gemini audio recording (cloud)
 - **Cmd+Opt+S**: Text-to-speech with Gemini
 - **Cmd+Opt+C**: Screen recording with video transcription
 - **Cmd+Opt+A**: Show transcription history
 
+**During OpenAI Recording**:
+- **Space**: Stop recording and transcribe
+- **Escape**: Cancel recording (discard)
+
+**After OpenAI Transcription (Continue Mode)**:
+- **Space**: Start new recording
+- **Escape**: Exit continue mode
+
+### OpenAI Realtime Transcription
+
+**Status**: ✅ Complete and integrated into main app
+**Key Files**:
+- `SharedSources/OpenAIRealtimeTranscriber.swift` - WebSocket-based realtime transcription
+- `Sources/OpenAIAudioRecordingManager.swift` - Audio recording manager for OpenAI
+
+**Features**:
+- ✅ Cmd+Opt+Z keyboard shortcut for OpenAI audio recording
+- ✅ Real-time streaming transcription via WebSocket
+- ✅ Space bar to stop recording (easier than key combo)
+- ✅ Space bar continue mode (start new recording after transcription)
+- ✅ Escape to cancel recording or exit continue mode
+- ✅ Auto-paste transcription at cursor position
+- ✅ Server-side VAD (voice activity detection)
+- ✅ Manual audio buffer commit on stop for reliable transcription
+
+### Auto-Paste Functionality
+
+**Status**: ✅ Working
+**Key Files**:
+- `Sources/main.swift` - `pasteTextAtCursor()`, `insertTextViaAccessibility()`, `pasteViaClipboard()`
+
+**Requirements**:
+- ⚠️ **Accessibility Permission Required**: Add the app to System Settings → Privacy & Security → Accessibility
+- Without this permission, both Accessibility API insert and CGEvent-based paste will fail
+
+**Paste Methods** (in order of preference):
+1. Accessibility API (`AXUIElementSetAttributeValue`) - direct text insertion
+2. Clipboard + Cmd+V (fallback) - copies to clipboard and simulates paste
+
+## Fred Intelligence
+
+This repository has Fred-generated intelligence data in `.fred/`.
+See `.fred/CLAUDE.md` for file labels and dependency analysis.

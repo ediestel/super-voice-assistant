@@ -136,10 +136,10 @@ public class AudioDeviceManager: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        var dataSize: UInt32 = UInt32(MemoryLayout<CFString>.size)
-        var uid: CFString?
-        
+
+        var dataSize: UInt32 = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var uid: Unmanaged<CFString>?
+
         let status = AudioObjectGetPropertyData(
             deviceID,
             &propertyAddress,
@@ -148,9 +148,9 @@ public class AudioDeviceManager: ObservableObject {
             &dataSize,
             &uid
         )
-        
-        guard status == noErr, let uid = uid else { return nil }
-        return uid as String
+
+        guard status == noErr, let uidRef = uid else { return nil }
+        return uidRef.takeUnretainedValue() as String
     }
     
     private func getDeviceName(deviceID: AudioDeviceID) -> String? {
@@ -159,10 +159,10 @@ public class AudioDeviceManager: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        var dataSize: UInt32 = UInt32(MemoryLayout<CFString>.size)
-        var name: CFString?
-        
+
+        var dataSize: UInt32 = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var name: Unmanaged<CFString>?
+
         let status = AudioObjectGetPropertyData(
             deviceID,
             &propertyAddress,
@@ -171,9 +171,9 @@ public class AudioDeviceManager: ObservableObject {
             &dataSize,
             &name
         )
-        
-        guard status == noErr, let name = name else { return nil }
-        return name as String
+
+        guard status == noErr, let nameRef = name else { return nil }
+        return nameRef.takeUnretainedValue() as String
     }
     
     private func hasInputChannels(deviceID: AudioDeviceID) -> Bool {
@@ -182,7 +182,7 @@ public class AudioDeviceManager: ObservableObject {
             mScope: kAudioDevicePropertyScopeInput,
             mElement: kAudioObjectPropertyElementMain
         )
-        
+
         var dataSize: UInt32 = 0
         let status = AudioObjectGetPropertyDataSize(
             deviceID,
@@ -191,15 +191,15 @@ public class AudioDeviceManager: ObservableObject {
             nil,
             &dataSize
         )
-        
+
         guard status == noErr, dataSize > 0 else { return false }
-        
-        let bufferCount = Int(dataSize) / MemoryLayout<AudioBuffer>.size
-        let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        defer { bufferList.deallocate() }
-        
-        bufferList.pointee.mNumberBuffers = UInt32(bufferCount)
-        
+
+        // Allocate the exact amount of memory needed for the variable-sized AudioBufferList
+        let bufferListPtr = UnsafeMutableRawPointer.allocate(byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { bufferListPtr.deallocate() }
+
+        let bufferList = bufferListPtr.assumingMemoryBound(to: AudioBufferList.self)
+
         let getStatus = AudioObjectGetPropertyData(
             deviceID,
             &propertyAddress,
@@ -208,9 +208,9 @@ public class AudioDeviceManager: ObservableObject {
             &dataSize,
             bufferList
         )
-        
+
         guard getStatus == noErr else { return false }
-        
+
         for i in 0..<Int(bufferList.pointee.mNumberBuffers) {
             let buffer = withUnsafePointer(to: &bufferList.pointee.mBuffers) { ptr in
                 UnsafeRawPointer(ptr).assumingMemoryBound(to: AudioBuffer.self)[i]
@@ -219,7 +219,7 @@ public class AudioDeviceManager: ObservableObject {
                 return true
             }
         }
-        
+
         return false
     }
     
@@ -229,7 +229,7 @@ public class AudioDeviceManager: ObservableObject {
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
-        
+
         var dataSize: UInt32 = 0
         let status = AudioObjectGetPropertyDataSize(
             deviceID,
@@ -238,15 +238,15 @@ public class AudioDeviceManager: ObservableObject {
             nil,
             &dataSize
         )
-        
+
         guard status == noErr, dataSize > 0 else { return false }
-        
-        let bufferCount = Int(dataSize) / MemoryLayout<AudioBuffer>.size
-        let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        defer { bufferList.deallocate() }
-        
-        bufferList.pointee.mNumberBuffers = UInt32(bufferCount)
-        
+
+        // Allocate the exact amount of memory needed for the variable-sized AudioBufferList
+        let bufferListPtr = UnsafeMutableRawPointer.allocate(byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { bufferListPtr.deallocate() }
+
+        let bufferList = bufferListPtr.assumingMemoryBound(to: AudioBufferList.self)
+
         let getStatus = AudioObjectGetPropertyData(
             deviceID,
             &propertyAddress,
@@ -255,9 +255,9 @@ public class AudioDeviceManager: ObservableObject {
             &dataSize,
             bufferList
         )
-        
+
         guard getStatus == noErr else { return false }
-        
+
         for i in 0..<Int(bufferList.pointee.mNumberBuffers) {
             let buffer = withUnsafePointer(to: &bufferList.pointee.mBuffers) { ptr in
                 UnsafeRawPointer(ptr).assumingMemoryBound(to: AudioBuffer.self)[i]
@@ -266,7 +266,7 @@ public class AudioDeviceManager: ObservableObject {
                 return true
             }
         }
-        
+
         return false
     }
     

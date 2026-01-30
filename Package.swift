@@ -43,6 +43,12 @@ let package = Package(
             name: "TestSentenceSplitter",
             targets: ["TestSentenceSplitter"]),
         .executable(
+            name: "TestOpenAITranscription",
+            targets: ["TestOpenAITranscription"]),
+        .executable(
+            name: "TestTextInserter",
+            targets: ["TestTextInserter"]),
+        .executable(
             name: "RecordScreen",
             targets: ["RecordScreen"]),
         .executable(
@@ -109,6 +115,14 @@ let package = Package(
             name: "TestSentenceSplitter",
             dependencies: ["SharedModels"],
             path: "tests/test-sentence-splitter"),
+        .executableTarget(
+            name: "TestOpenAITranscription",
+            dependencies: [],
+            path: "tests/test-openai-transcription"),
+        .executableTarget(
+            name: "TestTextInserter",
+            dependencies: ["SharedModels"],
+            path: "tests/test-text-inserter"),
         .executableTarget(
             name: "RecordScreen",
             dependencies: [],

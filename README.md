@@ -15,8 +15,9 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 ## Features
 
 **Voice-to-Text Transcription**
-- Press Command+Option+Z for local offline transcription with WhisperKit
+- Press Command+Option+Z for cloud transcription with OpenAI Realtime API (primary)
 - Press Command+Option+X for cloud transcription with Gemini API
+- Press Command+Option+Y for local offline transcription with WhisperKit
 - Automatic text pasting at cursor position
 - Transcription history with Command+Option+A
 
@@ -36,7 +37,8 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 
 - macOS 14.0 or later
 - Xcode 15+ or Xcode Command Line Tools (for Swift 5.9+)
-- Gemini API key (for text-to-speech and video transcription)
+- OpenAI API key (for primary voice transcription)
+- Gemini API key (for text-to-speech, video transcription, and Gemini audio)
 - ffmpeg (for screen recording functionality)
 
 ## System Permissions Setup
@@ -50,7 +52,7 @@ The app will automatically request microphone permission on first launch. If den
 
 ### 2. Accessibility Access (Required for Global Hotkeys & Auto-Paste)
 You must manually grant accessibility permissions for the app to:
-- Monitor global keyboard shortcuts (Command+Option+Z/S/X/A, Escape)
+- Monitor global keyboard shortcuts (Command+Option+Z/X/Y/S/A/C, Space, Escape)
 - Automatically paste transcribed text at cursor position
 
 **To enable:**
@@ -62,7 +64,7 @@ You must manually grant accessibility permissions for the app to:
    - If running the built binary directly: Add the **SuperVoiceAssistant** executable
 5. Ensure the checkbox next to the app is checked
 
-**Important:** Without accessibility access, the app cannot detect global hotkeys (Command+Option+Z/X/A/S/C, Escape) or paste text automatically.
+**Important:** Without accessibility access, the app cannot detect global hotkeys (Command+Option+Z/X/Y/A/S/C, Space, Escape) or paste text automatically.
 
 ### 3. Screen Recording Access (Required for Video Transcription)
 The app requires screen recording permission to capture screen content:
@@ -79,9 +81,11 @@ cd super-voice-assistant
 # Install ffmpeg (required for screen recording)
 brew install ffmpeg
 
-# Set up environment (for TTS and video transcription)
+# Set up environment
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+# Edit .env and add your API keys:
+#   OPENAI_API_KEY=your-openai-key (for primary transcription)
+#   GEMINI_API_KEY=your-gemini-key (for TTS, video, and Gemini audio)
 
 # Build the app
 swift build
@@ -114,13 +118,13 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 ### Voice-to-Text Transcription
 
-**Local (WhisperKit):**
-1. Launch the app - it appears in the menu bar
-2. Open Settings (click menu bar icon > Settings) to download a WhisperKit model
-3. Press **Command+Option+Z** to start recording (menu bar icon shows recording indicator)
-4. Press **Command+Option+Z** again to stop recording and transcribe
-5. The transcribed text automatically pastes at your cursor position
-6. Press **Escape** during recording to cancel without transcribing
+**Cloud (OpenAI Realtime - Primary):**
+1. Ensure OPENAI_API_KEY is set in your .env file
+2. Press **Command+Option+Z** to start recording (menu bar icon shows recording indicator)
+3. Press **Space** to stop recording and transcribe, or **Escape** to cancel
+4. After transcription, press **Space** again to start a new recording (continue mode)
+5. Press **Escape** to exit continue mode
+6. The transcribed text automatically pastes at your cursor position
 
 **Cloud (Gemini API):**
 1. Ensure GEMINI_API_KEY is set in your .env file
@@ -129,9 +133,18 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 4. The transcribed text automatically pastes at your cursor position
 5. Press **Escape** during recording to cancel without transcribing
 
+**Local (WhisperKit - Offline):**
+1. Launch the app - it appears in the menu bar
+2. Open Settings (click menu bar icon > Settings) to download a WhisperKit model
+3. Press **Command+Option+Y** to start recording (menu bar icon shows recording indicator)
+4. Press **Command+Option+Y** again to stop recording and transcribe
+5. The transcribed text automatically pastes at your cursor position
+6. Press **Escape** during recording to cancel without transcribing
+
 **When to use which:**
-- **WhisperKit (Cmd+Option+Z)**: Offline, privacy-focused, no API costs, good for general speech
-- **Gemini (Cmd+Option+X)**: Cloud-based, better accuracy for complex audio, requires internet
+- **OpenAI Realtime (Cmd+Option+Z)**: Cloud-based, real-time streaming, best accuracy, space bar controls
+- **Gemini (Cmd+Option+X)**: Cloud-based, good accuracy for complex audio
+- **WhisperKit (Cmd+Option+Y)**: Offline, privacy-focused, no API costs, good for general speech
 
 ### Text-to-Speech
 1. Select any text in any application
@@ -157,12 +170,20 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 ### Keyboard Shortcuts
 
-- **Command+Option+Z**: Start/stop audio recording and transcribe (WhisperKit - offline)
-- **Command+Option+X**: Start/stop audio recording and transcribe (Gemini - cloud)
+- **Command+Option+Z**: Start OpenAI Realtime recording (cloud, primary)
+- **Command+Option+X**: Start/stop Gemini audio recording (cloud)
+- **Command+Option+Y**: Start/stop WhisperKit recording (offline)
 - **Command+Option+S**: Read selected text aloud / Cancel TTS playback
 - **Command+Option+C**: Start/stop screen recording and transcribe
 - **Command+Option+A**: Show transcription history window
-- **Escape**: Cancel audio recording (when recording is active)
+
+**During OpenAI Recording (Cmd+Option+Z):**
+- **Space**: Stop recording and transcribe
+- **Escape**: Cancel recording (discard)
+
+**After OpenAI Transcription (Continue Mode):**
+- **Space**: Start new recording
+- **Escape**: Exit continue mode
 
 ## Available Commands
 

@@ -17,12 +17,23 @@ public class OpenAIRealtimeTranscriber {
     
     private let debugLogPath = "/tmp/openai_debug.log"
 
+    /// File-based debug logging is disabled by default to prevent disk space exhaustion.
+    /// Set OPENAI_DEBUG=1 environment variable to enable file logging.
+    private var debugEnabled: Bool {
+        ProcessInfo.processInfo.environment["OPENAI_DEBUG"] != nil
+    }
+
     public init() {}
 
     private func debugLog(_ message: String) {
+        // Always print to console for visibility
+        print(message)
+
+        // Only write to file when explicitly enabled via environment variable
+        guard debugEnabled else { return }
+
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let logLine = "[\(timestamp)] \(message)\n"
-        print(message)
         if let data = logLine.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: debugLogPath) {
                 if let handle = FileHandle(forWritingAtPath: debugLogPath) {
@@ -135,7 +146,8 @@ public class OpenAIRealtimeTranscriber {
         let jsonString = String(data: jsonData, encoding: .utf8)!
         
         try await webSocketTask.send(.string(jsonString))
-        debugLog("📤 Sent audio chunk (\(audioData.count) bytes)")
+        // NOTE: Per-chunk logging removed to prevent disk space exhaustion
+        // (was logging ~100 chunks/second during recording)
     }
     
     // MARK: - Manual control (usually NOT needed with server_vad)

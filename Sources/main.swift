@@ -9,19 +9,6 @@ import ApplicationServices
 import Foundation
 import CoreGraphics
 
-// Helper extension for file-based logging
-extension String {
-    func appendToFile(_ path: String) throws {
-        if let handle = FileHandle(forWritingAtPath: path) {
-            handle.seekToEndOfFile()
-            handle.write(self.data(using: .utf8)!)
-            handle.closeFile()
-        } else {
-            try self.write(toFile: path, atomically: true, encoding: .utf8)
-        }
-    }
-}
-
 // Environment variable loading
 func loadEnvironmentVariables() {
     let fileManager = FileManager.default
@@ -161,8 +148,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         print("   Cmd+Opt+A: History")
         print("   Cmd+Opt+S: TTS")
         print("   Cmd+Opt+C: Screen")
-        // Debug: Write startup log to file
-        try? "App started at \(Date())\nShortcuts: Z=OpenAI, X=Gemini, Y=Whisper, A=History, S=TTS, C=Screen\n".write(toFile: "/tmp/sva_startup.log", atomically: true, encoding: .utf8)
         
         // Set up keyboard shortcut handlers
         KeyboardShortcuts.onKeyUp(for: .startRecording) { [weak self] in
@@ -259,8 +244,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
 
         KeyboardShortcuts.onKeyUp(for: .openaiAudioRecording) { [weak self] in
             print("🟡 Cmd+Opt+Z pressed - OpenAI Realtime!")
-            // Debug: Write to file to confirm shortcut fires
-            try? "Cmd+Opt+Y pressed at \(Date())\n".write(toFile: "/tmp/openai_shortcut.log", atomically: true, encoding: .utf8)
             guard let self = self else { return }
 
             // Prevent starting OpenAI audio recording if screen recording is active
@@ -365,35 +348,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
     }
 
     @objc func testAutoPaste() {
-        let log = { (msg: String) in
-            let entry = "\(Date()): \(msg)\n"
-            print(msg)
-            if let data = entry.data(using: .utf8) {
-                if FileManager.default.fileExists(atPath: "/tmp/sva_paste_test.log") {
-                    if let handle = FileHandle(forWritingAtPath: "/tmp/sva_paste_test.log") {
-                        handle.seekToEndOfFile()
-                        handle.write(data)
-                        handle.closeFile()
-                    }
-                } else {
-                    try? entry.write(toFile: "/tmp/sva_paste_test.log", atomically: true, encoding: .utf8)
-                }
-            }
-        }
-
-        log("🧪 TEST: Starting auto-paste test...")
-        log("🧪 TEST: AXIsProcessTrusted = \(AXIsProcessTrusted())")
+        print("🧪 TEST: Starting auto-paste test...")
+        print("🧪 TEST: AXIsProcessTrusted = \(AXIsProcessTrusted())")
 
         // Save current frontmost app before clicking menu
         let targetApp = NSWorkspace.shared.frontmostApplication
-        log("🧪 TEST: Target app = \(targetApp?.localizedName ?? "none")")
+        print("🧪 TEST: Target app = \(targetApp?.localizedName ?? "none")")
 
         // Small delay to let user click into a text field
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             let testText = "[TEST PASTE SUCCESS]"
-            log("🧪 TEST: Calling pasteTextAtCursor with: \(testText)")
+            print("🧪 TEST: Calling pasteTextAtCursor with: \(testText)")
             self?.pasteTextAtCursor(testText)
-            log("🧪 TEST: pasteTextAtCursor completed")
+            print("🧪 TEST: pasteTextAtCursor completed")
         }
     }
 
@@ -721,6 +688,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
             return
         }
 
+        // Invalidate any existing timer first to prevent orphaned timers
+        transcriptionTimer?.invalidate()
+        transcriptionTimer = nil
+
         // Show initial indicator
         if let button = statusItem.button {
             button.image = nil
@@ -823,37 +794,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
     }
     
     func pasteTextAtCursor(_ text: String) {
-        func logPaste(_ msg: String) {
-            let entry = "\(Date()): \(msg)\n"
-            print(msg)
-            try? entry.appendToFile("/tmp/sva_paste_test.log")
-        }
-
         guard !text.isEmpty else {
-            logPaste("❌ pasteTextAtCursor: empty text, returning")
+            print("❌ pasteTextAtCursor: empty text, returning")
             return
         }
 
-        logPaste("📝 pasteTextAtCursor called with: \(text.prefix(50))...")
+        print("📝 pasteTextAtCursor called with: \(text.prefix(50))...")
 
         // Check accessibility permission
         let trusted = AXIsProcessTrusted()
-        logPaste("🔐 AXIsProcessTrusted = \(trusted)")
+        print("🔐 AXIsProcessTrusted = \(trusted)")
         if !trusted {
-            logPaste("❌ Accessibility NOT granted - paste may fail")
+            print("❌ Accessibility NOT granted - paste may fail")
         }
 
         // First try: Accessibility API (preferred method)
-        logPaste("🔄 Trying Accessibility API insert...")
+        print("🔄 Trying Accessibility API insert...")
         if insertTextViaAccessibility(text) {
-            logPaste("✅ Inserted via Accessibility API")
+            print("✅ Inserted via Accessibility API")
             return
         }
 
         // Fallback: Clipboard + Cmd+V
-        logPaste("⚠️ Accessibility insert failed, falling back to clipboard paste")
+        print("⚠️ Accessibility insert failed, falling back to clipboard paste")
         pasteViaClipboard(text)
-        logPaste("📋 pasteViaClipboard completed")
+        print("📋 pasteViaClipboard completed")
     }
 
     func insertTextViaAccessibility(_ text: String) -> Bool {

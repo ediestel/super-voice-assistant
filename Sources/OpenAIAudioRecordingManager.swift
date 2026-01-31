@@ -25,6 +25,7 @@ class OpenAIAudioRecordingManager {
     // Recording state - SAME as Gemini (simple bools)
     var isRecording = false
     private var isStartingRecording = false
+    private var firstSpacePressTime: Date?  // Double-tap detection (800ms window)
     private var escapeKeyMonitor: Any?
     private var spaceBarContinueMonitor: Any?
     private var canContinueWithSpaceBar = false
@@ -113,6 +114,7 @@ class OpenAIAudioRecordingManager {
 
     func startRecording() {
         isStartingRecording = true
+        firstSpacePressTime = nil  // Reset double-tap detection
         fullTranscription = ""
         audioChunkCount = 0
 
@@ -121,19 +123,28 @@ class OpenAIAudioRecordingManager {
         inputNode = audioEngine.inputNode
         configureInputDevice()
 
-        // Keyboard monitor: Space to stop, Escape to cancel
+        // Keyboard monitor: Double-tap Space to stop, Escape to cancel
         escapeKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard self?.isRecording == true else { return }
+            guard let self = self, self.isRecording else { return }
 
-            if event.keyCode == 49 { // Space bar - stop and transcribe
-                print("⏹ OpenAI recording stopped by Space bar")
-                DispatchQueue.main.async {
-                    self?.stopRecording()
+            if event.keyCode == 49 { // Space bar - double-tap to stop
+                let now = Date()
+                if let firstPress = self.firstSpacePressTime, now.timeIntervalSince(firstPress) < 0.8 {
+                    // Second tap within 800ms - stop recording
+                    self.firstSpacePressTime = nil
+                    print("⏹ OpenAI recording stopped by double-tap Space")
+                    DispatchQueue.main.async {
+                        self.stopRecording()
+                    }
+                } else {
+                    // First tap - just record the time
+                    self.firstSpacePressTime = now
+                    print("⏸ First Space tap (tap again within 800ms to stop)")
                 }
-            } else if event.keyCode == 53 { // Escape - cancel
+            } else if event.keyCode == 53 { // Escape - cancel immediately
                 print("🛑 OpenAI recording cancelled by Escape key")
                 DispatchQueue.main.async {
-                    self?.cancelRecording()
+                    self.cancelRecording()
                 }
             }
         }

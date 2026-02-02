@@ -159,10 +159,8 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
         inputNode = audioEngine.inputNode
         configureInputDevice()
 
-        // Set up keyboard handler for this recording session
-        keyboardHandler.delegate = self
-        keyboardHandler.setMode(.recording)
-        isKeyboardDelegateActive = true
+        // NOTE: Keyboard handler is set up AFTER audio capture starts (in startAudioCapture)
+        // to prevent race condition where user stops recording before audio is ready
 
         // Connect to OpenAI and start streaming
         guard #available(macOS 14.0, *) else {
@@ -263,6 +261,13 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
 
             // Transition to recording state
             stateManager.transition(to: .recording, source: .openai)
+
+            // Set up keyboard handler AFTER audio capture is ready
+            // This prevents race condition where user stops before audio starts
+            keyboardHandler.delegate = self
+            keyboardHandler.setMode(.recording)
+            isKeyboardDelegateActive = true
+
             print("🎤 OpenAI audio capture started")
         } catch {
             print("❌ Failed to start audio engine: \(error)")

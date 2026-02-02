@@ -158,26 +158,7 @@ public class VideoTranscriber {
     // MARK: - Private Helpers
 
     private func loadApiKey() -> String? {
-        // Check environment variable first
-        if let envKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] {
-            return envKey
-        }
-
-        // Try to read from .env file
-        let envPath = ".env"
-        guard let envContent = try? String(contentsOfFile: envPath, encoding: .utf8) else {
-            return nil
-        }
-
-        for line in envContent.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("GEMINI_API_KEY=") {
-                let key = String(trimmed.dropFirst("GEMINI_API_KEY=".count))
-                return key.isEmpty ? nil : key
-            }
-        }
-
-        return nil
+        return EnvironmentLoader.getApiKey("GEMINI_API_KEY")
     }
 
     private func getMimeType(for fileExtension: String) -> String {

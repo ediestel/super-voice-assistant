@@ -7,6 +7,10 @@ public class GeminiAudioCollector {
     private var webSocketTask: URLSessionWebSocketTask?
     private var didSendSetup: Bool = false
     private let session = URLSession.shared
+
+    // Concurrent call protection
+    private var isCollecting = false
+    private let operationLock = NSLock()
     
     public init(apiKey: String) {
         self.apiKey = apiKey
@@ -26,6 +30,24 @@ public class GeminiAudioCollector {
     public func collectAudioChunks(from text: String, onComplete: ((Result<Void, Error>) -> Void)? = nil) -> AsyncThrowingStream<Data, Error> {
         AsyncThrowingStream { continuation in
             Task {
+                // Check for concurrent calls
+                self.operationLock.lock()
+                if self.isCollecting {
+                    self.operationLock.unlock()
+                    let error = GeminiAudioCollectorError.alreadyCollecting
+                    onComplete?(.failure(error))
+                    continuation.finish(throwing: error)
+                    return
+                }
+                self.isCollecting = true
+                self.operationLock.unlock()
+
+                defer {
+                    self.operationLock.lock()
+                    self.isCollecting = false
+                    self.operationLock.unlock()
+                }
+
                 do {
                     try await self.performCollection(text: text, continuation: continuation, onComplete: onComplete)
                 } catch {
@@ -38,14 +60,20 @@ public class GeminiAudioCollector {
     }
     
     private func performCollection(text: String, continuation: AsyncThrowingStream<Data, Error>.Continuation, onComplete: ((Result<Void, Error>) -> Void)? = nil) async throws {
-        guard let url = URL(string: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=\(apiKey)") else {
+        // Use URL without API key for security - key goes in header
+        guard let url = URL(string: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent") else {
             throw GeminiAudioCollectorError.invalidURL
         }
-        
+
         // Always create a fresh connection to avoid stale socket issues
         // (Gemini WebSocket connections timeout after ~10 minutes of idle)
         closeConnection()
-        let task = session.webSocketTask(with: url)
+
+        // Create request with API key in header instead of URL
+        var request = URLRequest(url: url)
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+
+        let task = session.webSocketTask(with: request)
         task.resume()
         webSocketTask = task
 
@@ -74,8 +102,13 @@ public class GeminiAudioCollector {
                 }
                 """
                 try await webSocketTask.send(.string(setupMessage))
-                // Wait for setup confirmation
-                _ = try await webSocketTask.receive()
+
+                // Wait for and validate setup confirmation
+                let setupResponse = try await webSocketTask.receive()
+                if !validateSetupResponse(setupResponse) {
+                    closeConnection()
+                    throw GeminiAudioCollectorError.setupFailed("Invalid setup response from server")
+                }
                 didSendSetup = true
             }
             
@@ -106,35 +139,12 @@ public class GeminiAudioCollector {
                 
                 switch message {
                 case .string(let text):
-                    // Log full response for debugging
-                    print("📝 Received text message: \(text)")
-
-                    // Check for error responses
-                    if let data = text.data(using: .utf8),
-                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        if let error = json["error"] as? [String: Any] {
-                            let code = error["code"] as? Int ?? -1
-                            let message = error["message"] as? String ?? "Unknown error"
-                            let status = error["status"] as? String ?? ""
-                            print("🚨 API Error - Code: \(code), Status: \(status), Message: \(message)")
-                        }
-                    }
-
                     if text.contains("\"done\":true") || text.contains("turn_complete") || text.contains("\"turnComplete\":true") {
                         isComplete = true
                     }
                 case .data(let data):
                     do {
                         if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-
-                            // Check for API errors in data response
-                            if let error = jsonObject["error"] as? [String: Any] {
-                                let code = error["code"] as? Int ?? -1
-                                let message = error["message"] as? String ?? "Unknown error"
-                                let status = error["status"] as? String ?? ""
-                                print("🚨 API Error - Code: \(code), Status: \(status), Message: \(message)")
-                            }
-
                             // Check for completion in JSON response
                             if let serverContent = jsonObject["serverContent"] as? [String: Any],
                                let turnComplete = serverContent["turnComplete"] as? Bool,
@@ -153,22 +163,20 @@ public class GeminiAudioCollector {
                                        mimeType.starts(with: "audio/pcm"),
                                        let base64Data = inlineData["data"] as? String,
                                        let actualAudioData = Data(base64Encoded: base64Data) {
-
-                                        print("🎵 Yielding audio chunk: \(actualAudioData.count) bytes")
                                         continuation.yield(actualAudioData)
                                     }
                                 }
                             }
                         }
                     } catch {
-                        print("⚠️ JSON parsing error: \(error)")
+                        // Log JSON parsing errors for debugging
+                        print("⚠️ Gemini JSON parse error (data length: \(data.count)): \(error.localizedDescription)")
                     }
                 @unknown default:
                     break
                 }
             }
             
-            print("✅ Audio collection complete")
             // Notify successful completion before finishing the stream
             onComplete?(.success(()))
             continuation.finish()
@@ -179,18 +187,50 @@ public class GeminiAudioCollector {
             throw GeminiAudioCollectorError.collectionError(error)
         }
     }
+
+    /// Validate that the setup response from the server is valid
+    private func validateSetupResponse(_ message: URLSessionWebSocketTask.Message) -> Bool {
+        switch message {
+        case .string(let text):
+            // Check for setupComplete in the response
+            if text.contains("setupComplete") || text.contains("setup_complete") {
+                return true
+            }
+            // Also accept if we get a valid JSON response without error
+            if let data = text.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               json["error"] == nil {
+                return true
+            }
+            return false
+        case .data(let data):
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               json["error"] == nil {
+                return true
+            }
+            return false
+        @unknown default:
+            return false
+        }
+    }
 }
 
 public enum GeminiAudioCollectorError: Error, LocalizedError {
     case invalidURL
     case collectionError(Error)
-    
+    case alreadyCollecting
+    case setupFailed(String)
+
     public var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid WebSocket URL"
         case .collectionError(let error):
             return "Audio collection error: \(error.localizedDescription)"
+        case .alreadyCollecting:
+            return "Audio collection already in progress"
+        case .setupFailed(let reason):
+            return "WebSocket setup failed: \(reason)"
         }
     }
 }

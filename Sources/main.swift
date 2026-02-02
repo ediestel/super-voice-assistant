@@ -2,39 +2,18 @@ import Cocoa
 import SwiftUI
 import KeyboardShortcuts
 import AVFoundation
-import WhisperKit
 import SharedModels
 import Combine
 import ApplicationServices
 import Foundation
 import CoreGraphics
 
-// Environment variable loading
+// Environment variable loading - uses shared EnvironmentLoader
 func loadEnvironmentVariables() {
-    let fileManager = FileManager.default
-    let currentDirectory = fileManager.currentDirectoryPath
-    let envPath = "\(currentDirectory)/.env"
-    
-    guard fileManager.fileExists(atPath: envPath),
-          let envContent = try? String(contentsOfFile: envPath) else {
-        return
-    }
-    
-    for line in envContent.components(separatedBy: .newlines) {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedLine.isEmpty && !trimmedLine.hasPrefix("#") else { continue }
-        
-        let parts = trimmedLine.components(separatedBy: "=")
-        guard parts.count == 2 else { continue }
-        
-        let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-        setenv(key, value, 1)
-    }
+    EnvironmentLoader.load()
 }
 
 extension KeyboardShortcuts.Name {
-    static let startRecording = Self("startRecording")
     static let showHistory = Self("showHistory")
     static let readSelectedText = Self("readSelectedText")
     static let toggleScreenRecording = Self("toggleScreenRecording")
@@ -42,26 +21,37 @@ extension KeyboardShortcuts.Name {
     static let openaiAudioRecording = Self("openaiAudioRecording")
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDelegate, GeminiAudioRecordingManagerDelegate, OpenAIAudioRecordingManagerDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerDelegate, OpenAIAudioRecordingManagerDelegate {
     var statusItem: NSStatusItem!
     var settingsWindow: SettingsWindowController?
     private var unifiedWindow: UnifiedManagerWindow?
 
-    private var displayTimer: Timer?
-    private var modelCancellable: AnyCancellable?
-    private var transcriptionTimer: Timer?
-    private var videoProcessingTimer: Timer?
-    private var audioManager: AudioTranscriptionManager!
     private var geminiAudioManager: GeminiAudioRecordingManager!
     private var openaiAudioManager: OpenAIAudioRecordingManager!
     private var streamingPlayer: GeminiStreamingPlayer?
     private var audioCollector: GeminiAudioCollector?
-    private var isCurrentlyPlaying = false
+    private var _isCurrentlyPlaying = false
+    private let playingLock = NSLock()
+    private var isCurrentlyPlaying: Bool {
+        get {
+            playingLock.lock()
+            defer { playingLock.unlock() }
+            return _isCurrentlyPlaying
+        }
+        set {
+            playingLock.lock()
+            _isCurrentlyPlaying = newValue
+            playingLock.unlock()
+        }
+    }
     private var currentStreamingTask: Task<Void, Never>?
     private var screenRecorder = ScreenRecorder()
     private var currentVideoURL: URL?
     private var videoTranscriber = VideoTranscriber()
     private var targetAppBeforeRecording: NSRunningApplication?
+
+    // State manager for centralized recording state
+    private let stateManager = RecordingStateManager.shared
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility permissions
@@ -114,7 +104,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "OpenAI Audio Recording: Press Command+Option+Z", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Gemini Audio Recording: Press Command+Option+X", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "WhisperKit Recording: Press Command+Option+Y", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "History: Press Command+Option+A", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Read Selected Text: Press Command+Option+S", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Screen Recording: Press Command+Option+C", action: nil, keyEquivalent: ""))
@@ -128,14 +117,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         statusItem.menu = menu
         
         // Reset any cached shortcuts first
-        KeyboardShortcuts.reset(.startRecording)
         KeyboardShortcuts.reset(.openaiAudioRecording)
-        KeyboardShortcuts.reset(.geminiAudioRecording)
 
-        // Set keyboard shortcuts: Z=OpenAI, X=Gemini, Y=WhisperKit
+        // Set keyboard shortcuts: Z=OpenAI
         KeyboardShortcuts.setShortcut(.init(.z, modifiers: [.command, .option]), for: .openaiAudioRecording)
-        KeyboardShortcuts.setShortcut(.init(.x, modifiers: [.command, .option]), for: .geminiAudioRecording)
-        KeyboardShortcuts.setShortcut(.init(.y, modifiers: [.command, .option]), for: .startRecording)
+        // Gemini disabled - uncomment to enable:
+        // KeyboardShortcuts.setShortcut(.init(.x, modifiers: [.command, .option]), for: .geminiAudioRecording)
         KeyboardShortcuts.setShortcut(.init(.a, modifiers: [.command, .option]), for: .showHistory)
         KeyboardShortcuts.setShortcut(.init(.s, modifiers: [.command, .option]), for: .readSelectedText)
         KeyboardShortcuts.setShortcut(.init(.c, modifiers: [.command, .option]), for: .toggleScreenRecording)
@@ -143,55 +130,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         // Debug: Print registered shortcuts
         print("🔧 Shortcuts registered:")
         print("   Cmd+Opt+Z: OpenAI Realtime")
-        print("   Cmd+Opt+X: Gemini")
-        print("   Cmd+Opt+Y: WhisperKit")
         print("   Cmd+Opt+A: History")
         print("   Cmd+Opt+S: TTS")
         print("   Cmd+Opt+C: Screen")
         
         // Set up keyboard shortcut handlers
-        KeyboardShortcuts.onKeyUp(for: .startRecording) { [weak self] in
-            guard let self = self else { return }
-
-            // Prevent starting audio recording if screen recording is active
-            if self.screenRecorder.recording {
-                let notification = NSUserNotification()
-                notification.title = "Cannot Start Audio Recording"
-                notification.informativeText = "Screen recording is currently active. Stop it first with Cmd+Option+C"
-                NSUserNotificationCenter.default.deliver(notification)
-                print("⚠️ Blocked audio recording - screen recording is active")
-                return
-            }
-
-            // Prevent starting audio recording if Gemini audio recording is active
-            if self.geminiAudioManager.isRecording {
-                let notification = NSUserNotification()
-                notification.title = "Cannot Start Audio Recording"
-                notification.informativeText = "Gemini audio recording is currently active. Stop it first with Cmd+Option+X"
-                NSUserNotificationCenter.default.deliver(notification)
-                print("Blocked audio recording - Gemini audio recording is active")
-                return
-            }
-
-            // Prevent starting audio recording if OpenAI audio recording is active
-            if self.openaiAudioManager.isRecording {
-                let notification = NSUserNotification()
-                notification.title = "Cannot Start Audio Recording"
-                notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Cmd+Option+Z"
-                NSUserNotificationCenter.default.deliver(notification)
-                print("Blocked audio recording - OpenAI audio recording is active")
-                return
-            }
-
-            // If about to start a fresh recording, make sure any previous
-            // processing indicator is stopped and UI is reset.
-            if !self.audioManager.isRecording {
-                self.stopTranscriptionIndicator()
-                self.targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
-            }
-            self.audioManager.toggleRecording()
-        }
-        
         KeyboardShortcuts.onKeyUp(for: .showHistory) { [weak self] in
             self?.showTranscriptionHistory()
         }
@@ -213,30 +156,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
                 return
             }
 
-            // Prevent starting Gemini audio recording if WhisperKit recording is active
-            if self.audioManager.isRecording {
+            // Use state manager for mutual exclusion check
+            if !self.stateManager.canStart(source: .gemini) && !self.geminiAudioManager.isRecording {
                 let notification = NSUserNotification()
                 notification.title = "Cannot Start Gemini Audio Recording"
-                notification.informativeText = "WhisperKit recording is currently active. Stop it first with Cmd+Option+Y"
+                notification.informativeText = "Another recording is currently active"
                 NSUserNotificationCenter.default.deliver(notification)
-                print("Blocked Gemini audio recording - WhisperKit recording is active")
+                print("Blocked Gemini audio recording - another recording is active")
                 return
             }
 
-            // Prevent starting Gemini audio recording if OpenAI audio recording is active
-            if self.openaiAudioManager.isRecording {
-                let notification = NSUserNotification()
-                notification.title = "Cannot Start Gemini Audio Recording"
-                notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Cmd+Option+Z"
-                NSUserNotificationCenter.default.deliver(notification)
-                print("Blocked Gemini audio recording - OpenAI audio recording is active")
-                return
-            }
-
-            // If about to start a fresh recording, make sure any previous
-            // processing indicator is stopped and UI is reset.
+            // If about to start a fresh recording, capture target app
             if !self.geminiAudioManager.isRecording {
-                self.stopTranscriptionIndicator()
                 self.targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
             }
             self.geminiAudioManager.toggleRecording()
@@ -256,30 +187,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
                 return
             }
 
-            // Prevent starting OpenAI audio recording if WhisperKit recording is active
-            if self.audioManager.isRecording {
+            // Use state manager for mutual exclusion check
+            if !self.stateManager.canStart(source: .openai) && !self.openaiAudioManager.isRecording {
                 let notification = NSUserNotification()
                 notification.title = "Cannot Start OpenAI Audio Recording"
-                notification.informativeText = "WhisperKit recording is currently active. Stop it first with Cmd+Option+Y"
+                notification.informativeText = "Another recording is currently active"
                 NSUserNotificationCenter.default.deliver(notification)
-                print("Blocked OpenAI audio recording - WhisperKit recording is active")
+                print("Blocked OpenAI audio recording - another recording is active")
                 return
             }
 
-            // Prevent starting OpenAI audio recording if Gemini audio recording is active
-            if self.geminiAudioManager.isRecording {
-                let notification = NSUserNotification()
-                notification.title = "Cannot Start OpenAI Audio Recording"
-                notification.informativeText = "Gemini audio recording is currently active. Stop it first with Cmd+Option+X"
-                NSUserNotificationCenter.default.deliver(notification)
-                print("Blocked OpenAI audio recording - Gemini audio recording is active")
-                return
-            }
-
-            // If about to start a fresh recording, make sure any previous
-            // processing indicator is stopped and UI is reset.
+            // If about to start a fresh recording, capture target app
             if !self.openaiAudioManager.isRecording {
-                self.stopTranscriptionIndicator()
                 self.targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
             }
             self.openaiAudioManager.toggleRecording()
@@ -289,10 +208,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
             self?.toggleScreenRecording()
         }
 
-        // Set up audio manager
-        audioManager = AudioTranscriptionManager()
-        audioManager.delegate = self
-
         // Set up Gemini audio manager
         geminiAudioManager = GeminiAudioRecordingManager()
         geminiAudioManager.delegate = self
@@ -301,27 +216,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         openaiAudioManager = OpenAIAudioRecordingManager()
         openaiAudioManager.delegate = self
 
-        // Check downloaded models at startup (in background)
-        Task {
-            await ModelStateManager.shared.checkDownloadedModels()
-            print("Model check completed at startup")
-            
-            // Load the initially selected model
-            if let selectedModel = ModelStateManager.shared.selectedModel {
-                _ = await ModelStateManager.shared.loadModel(selectedModel)
+        // Register for state changes to update status bar
+        stateManager.onStateChange { [weak self] state, source in
+            DispatchQueue.main.async {
+                self?.handleRecordingStateChange(state: state, source: source)
             }
         }
-        
-        // Observe model selection changes
-        modelCancellable = ModelStateManager.shared.$selectedModel
-            .dropFirst() // Skip the initial value
-            .sink { selectedModel in
-                guard let selectedModel = selectedModel else { return }
-                Task {
-                    // Load the new model
-                    _ = await ModelStateManager.shared.loadModel(selectedModel)
-                }
+    }
+
+    private func handleRecordingStateChange(state: RecordingState, source: RecordingSource?) {
+        // Don't update status bar if screen recording is active
+        if screenRecorder.recording { return }
+
+        switch state {
+        case .idle:
+            // Reset to default icon
+            if let button = statusItem.button {
+                button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+                button.title = ""
             }
+        case .starting, .recording:
+            // Green dot while recording
+            if let button = statusItem.button {
+                button.image = nil
+                button.title = "🟢"
+            }
+        case .processing:
+            // Blue dot for processing
+            if let button = statusItem.button {
+                button.image = nil
+                button.title = "🔵"
+            }
+        case .continueMode:
+            // Yellow dot in continue mode
+            showContinueModeIndicator()
+        }
     }
     
 
@@ -376,16 +305,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
     }
 
     func toggleScreenRecording() {
-        // Prevent starting screen recording if audio recording is active
-        if !screenRecorder.recording && audioManager.isRecording {
-            let notification = NSUserNotification()
-            notification.title = "Cannot Start Screen Recording"
-            notification.informativeText = "WhisperKit recording is currently active. Stop it first with Cmd+Option+Y"
-            NSUserNotificationCenter.default.deliver(notification)
-            print("⚠️ Blocked screen recording - audio recording is active")
-            return
-        }
-
         // Prevent starting screen recording if Gemini audio recording is active
         if !screenRecorder.recording && geminiAudioManager.isRecording {
             let notification = NSUserNotification()
@@ -504,7 +423,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
                     // Update status bar to show recording indicator
                     if let button = self.statusItem.button {
                         button.image = nil
-                        button.title = "🎥 REC"
+                        button.title = "🔴"
                     }
 
                     // Show success notification
@@ -688,85 +607,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
             return
         }
 
-        // Invalidate any existing timer first to prevent orphaned timers
-        transcriptionTimer?.invalidate()
-        transcriptionTimer = nil
-
-        // Show initial indicator
+        // Show blue dot for processing
         if let button = statusItem.button {
             button.image = nil
-            button.title = "⚙️ Processing..."
-        }
-
-        // Animate the indicator
-        var dotCount = 0
-        transcriptionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            guard let self = self else {
-                self?.transcriptionTimer?.invalidate()
-                return
-            }
-
-            // Don't update if screen recording is active
-            if self.screenRecorder.recording {
-                return
-            }
-
-            if let button = self.statusItem.button {
-                dotCount = (dotCount + 1) % 4
-                let dots = String(repeating: ".", count: dotCount)
-                let spaces = String(repeating: " ", count: 3 - dotCount)
-                button.title = "⚙️ Processing" + dots + spaces
-            }
+            button.title = "🔵"
         }
     }
     
     func stopTranscriptionIndicator() {
-        transcriptionTimer?.invalidate()
-        transcriptionTimer = nil
-
         // Don't update status bar if screen recording is active
         if screenRecorder.recording {
             return
         }
 
-        // If not currently recording, reset to default icon.
-        // When recording, the live level updates will take over UI shortly.
-        if audioManager?.isRecording != true {
-            if let button = statusItem.button {
-                button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
-                button.title = ""
-            }
+        // Reset to default icon
+        if let button = statusItem.button {
+            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.title = ""
         }
     }
 
     func startVideoProcessingIndicator() {
-        // Show initial indicator
+        // Show blue dot for video processing
         if let button = statusItem.button {
             button.image = nil
-            button.title = "🎬 Processing..."
-        }
-
-        // Animate the indicator
-        var dotCount = 0
-        videoProcessingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            guard let self = self else {
-                self?.videoProcessingTimer?.invalidate()
-                return
-            }
-
-            if let button = self.statusItem.button {
-                dotCount = (dotCount + 1) % 4
-                let dots = String(repeating: ".", count: dotCount)
-                let spaces = String(repeating: " ", count: 3 - dotCount)
-                button.title = "🎬 Processing" + dots + spaces
-            }
+            button.title = "🔵"
         }
     }
 
     func stopVideoProcessingIndicator() {
-        videoProcessingTimer?.invalidate()
-        videoProcessingTimer = nil
-
         // Reset to default icon
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
@@ -858,14 +727,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         // Use saved target app from when recording started
         let targetApp = targetAppBeforeRecording ?? NSWorkspace.shared.frontmostApplication
 
-        // Save current clipboard contents
-        let pasteboard = NSPasteboard.general
-        let savedTypes = pasteboard.types ?? []
-        var savedItems: [NSPasteboard.PasteboardType: Data] = [:]
+        // Check if we have Accessibility permission for auto-paste
+        let hasAccessibility = AXIsProcessTrusted()
 
-        for type in savedTypes {
-            if let data = pasteboard.data(forType: type) {
-                savedItems[type] = data
+        let pasteboard = NSPasteboard.general
+
+        // Only save/restore clipboard if we can auto-paste
+        var savedItems: [NSPasteboard.PasteboardType: Data] = [:]
+        if hasAccessibility {
+            let savedTypes = pasteboard.types ?? []
+            for type in savedTypes {
+                if let data = pasteboard.data(forType: type) {
+                    savedItems[type] = data
+                }
             }
         }
 
@@ -873,25 +747,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
+        if !hasAccessibility {
+            // No Accessibility - just leave text on clipboard for manual paste
+            print("📋 Text copied to clipboard - press Cmd+V to paste")
+            showTranscriptionNotification("📋 Copied! Press Cmd+V to paste")
+            return
+        }
+
         // Activate target app
-        targetApp?.activate(options: [])
-        usleep(50000) // 50ms
+        print("🎯 Target app: \(targetApp?.localizedName ?? "nil") (bundleID: \(targetApp?.bundleIdentifier ?? "nil"))")
+        print("🎯 Activating target app...")
+        targetApp?.activate(options: .activateIgnoringOtherApps)
+        usleep(150000) // 150ms - give app time to activate
 
         // Send Cmd+V
+        print("📤 Sending Cmd+V...")
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
-            print("❌ Failed to create CGEvent for Cmd+V - Accessibility permission required")
+            print("❌ Failed to create CGEvent for Cmd+V")
             return
         }
 
         keyDown.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
+        usleep(10000) // 10ms between key down and up
+        keyUp.flags = .maskCommand
         keyUp.post(tap: .cghidEventTap)
 
-        print("✅ Paste sent to \(targetApp?.localizedName ?? "unknown")")
+        print("✅ Cmd+V sent to \(targetApp?.localizedName ?? "unknown")")
 
-        // Restore clipboard after short delay
+        // Restore clipboard after short delay (only if we auto-pasted)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             pasteboard.clearContents()
             for (type, data) in savedItems {
@@ -919,54 +805,48 @@ class AppDelegate: NSObject, NSApplicationDelegate, AudioTranscriptionManagerDel
 
         print("📚 Showing history window for paste failure recovery")
     }
-    
-    // MARK: - AudioTranscriptionManagerDelegate
-    
+
+    // MARK: - GeminiAudioRecordingManagerDelegate
+
     func audioLevelDidUpdate(db: Float) {
         updateStatusBarWithLevel(db: db)
     }
-    
+
     func transcriptionDidStart() {
         startTranscriptionIndicator()
     }
-    
+
     func transcriptionDidComplete(text: String) {
         stopTranscriptionIndicator()
         pasteTextAtCursor(text)
         showTranscriptionNotification(text)
     }
-    
+
     func transcriptionDidFail(error: String) {
         stopTranscriptionIndicator()
         showTranscriptionError(error)
     }
-    
+
     func recordingWasCancelled() {
-        // Ensure any processing indicator is stopped
         stopTranscriptionIndicator()
-        // Reset the status bar icon
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
-            button.title = ""
-        }
-        
-        // Show notification
-        let notification = NSUserNotification()
-        notification.title = "Recording Cancelled"
-        notification.informativeText = "Recording was cancelled"
-        NSUserNotificationCenter.default.deliver(notification)
-    }
-    
-    func recordingWasSkippedDueToSilence() {
-        // Ensure any processing indicator is stopped
-        stopTranscriptionIndicator()
-        // Reset the status bar icon
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
             button.title = ""
         }
 
-        // Optionally show a subtle notification
+        let notification = NSUserNotification()
+        notification.title = "Recording Cancelled"
+        notification.informativeText = "Recording was cancelled"
+        NSUserNotificationCenter.default.deliver(notification)
+    }
+
+    func recordingWasSkippedDueToSilence() {
+        stopTranscriptionIndicator()
+        if let button = statusItem.button {
+            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.title = ""
+        }
+
         let notification = NSUserNotification()
         notification.title = "Recording Skipped"
         notification.informativeText = "Audio was too quiet to transcribe"

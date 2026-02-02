@@ -14,25 +14,39 @@ protocol OpenAIAudioRecordingManagerDelegate: AnyObject {
     func openAIRecordingWasSkippedDueToSilence()
 }
 
-class OpenAIAudioRecordingManager {
+class OpenAIAudioRecordingManager: KeyboardEventDelegate {
     weak var delegate: OpenAIAudioRecordingManagerDelegate?
 
-    // Audio properties - SAME as Gemini
+    // Audio properties
     private var audioEngine: AVAudioEngine!
     private var inputNode: AVAudioInputNode!
     private let targetSampleRate: Double = 24000
 
-    // Recording state - SAME as Gemini (simple bools)
-    var isRecording = false
-    private var isStartingRecording = false
-    private var firstSpacePressTime: Date?  // Double-tap detection (800ms window)
-    private var escapeKeyMonitor: Any?
-    private var spaceBarContinueMonitor: Any?
-    private var canContinueWithSpaceBar = false
+    // Proper resampling via AVAudioConverter
+    private var audioConverter: AVAudioConverter?
+    private var targetFormat: AVAudioFormat?
+
+    // Engine lifecycle serialization
+    private let engineQueue = DispatchQueue(label: "com.supervoice.openai.audioengine")
+    private var isEngineRunning = false
+
+    // State management - uses centralized state machine
+    private let stateManager = RecordingStateManager.shared
+    private let keyboardHandler = KeyboardEventHandler.shared
 
     // OpenAI specific
     private var realtimeTranscriber: OpenAIRealtimeTranscriber?
-    private var fullTranscription = ""
+    // Thread-safe delta collection
+    private var transcriptionDeltas: [String] = []
+    private let deltasLock = NSLock()
+
+    // Track if this manager is the active keyboard delegate
+    private var isKeyboardDelegateActive = false
+
+    /// Public accessor for recording state (for AppDelegate checks)
+    var isRecording: Bool {
+        return stateManager.activeSource == .openai && stateManager.isRecording
+    }
 
     init() {
         setupAudioEngine()
@@ -97,72 +111,75 @@ class OpenAIAudioRecordingManager {
         alert.runModal()
     }
 
-    // SAME pattern as Gemini
+    // MARK: - Recording Control
+
     func toggleRecording() {
-        if isStartingRecording {
-            return
-        }
-
-        isRecording.toggle()
-
-        if isRecording {
+        // Check current state
+        if stateManager.activeSource == .openai && stateManager.isRecording {
+            stopRecording()
+        } else if stateManager.canStart(source: .openai) {
             startRecording()
         } else {
-            stopRecording()
+            print("⚠️ Cannot toggle OpenAI recording - state: \(stateManager.currentState)")
         }
     }
 
     func startRecording() {
-        isStartingRecording = true
-        firstSpacePressTime = nil  // Reset double-tap detection
-        fullTranscription = ""
+        // Transition to starting state
+        guard stateManager.transition(to: .starting, source: .openai) else {
+            print("❌ Cannot start OpenAI recording - invalid state transition")
+            return
+        }
+
+        // Thread-safe clear of deltas
+        deltasLock.lock()
+        transcriptionDeltas.removeAll()
+        deltasLock.unlock()
+
         audioChunkCount = 0
 
-        // Fresh audio engine - SAME as Gemini
+        // Serialize engine operations to prevent race conditions
+        engineQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            // Wait for any prior engine to fully stop
+            if self.isEngineRunning {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+
+            DispatchQueue.main.async {
+                self.setupAndConnectOpenAI()
+            }
+        }
+    }
+
+    private func setupAndConnectOpenAI() {
+        // Fresh audio engine
         audioEngine = AVAudioEngine()
         inputNode = audioEngine.inputNode
         configureInputDevice()
 
-        // Keyboard monitor: Double-tap Space to stop, Escape to cancel
-        escapeKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self, self.isRecording else { return }
-
-            if event.keyCode == 49 { // Space bar - double-tap to stop
-                let now = Date()
-                if let firstPress = self.firstSpacePressTime, now.timeIntervalSince(firstPress) < 0.8 {
-                    // Second tap within 800ms - stop recording
-                    self.firstSpacePressTime = nil
-                    print("⏹ OpenAI recording stopped by double-tap Space")
-                    DispatchQueue.main.async {
-                        self.stopRecording()
-                    }
-                } else {
-                    // First tap - just record the time
-                    self.firstSpacePressTime = now
-                    print("⏸ First Space tap (tap again within 800ms to stop)")
-                }
-            } else if event.keyCode == 53 { // Escape - cancel immediately
-                print("🛑 OpenAI recording cancelled by Escape key")
-                DispatchQueue.main.async {
-                    self.cancelRecording()
-                }
-            }
-        }
+        // Set up keyboard handler for this recording session
+        keyboardHandler.delegate = self
+        keyboardHandler.setMode(.recording)
+        isKeyboardDelegateActive = true
 
         // Connect to OpenAI and start streaming
         guard #available(macOS 14.0, *) else {
             print("⚠️ OpenAI Realtime requires macOS 14.0+")
-            isRecording = false
-            isStartingRecording = false
+            stateManager.transition(to: .idle)
             return
         }
 
         realtimeTranscriber = OpenAIRealtimeTranscriber()
 
+        // Collect deltas in array instead of O(n²) string concatenation
         realtimeTranscriber?.onTranscriptDelta = { [weak self] delta in
+            guard let self = self else { return }
+            self.deltasLock.lock()
+            self.transcriptionDeltas.append(delta)
+            self.deltasLock.unlock()
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.fullTranscription += delta
                 self.delegate?.openAITranscriptionDidReceiveDelta(delta: delta)
             }
         }
@@ -180,6 +197,12 @@ class OpenAIAudioRecordingManager {
             }
         }
 
+        // Handle final transcript from server VAD
+        realtimeTranscriber?.onFinalTranscript = { [weak self] finalText in
+            print("📨 onFinalTranscript received: \"\(finalText.prefix(50))...\"")
+            self?.handleTranscriptionComplete(finalText)
+        }
+
         // Connect and start audio
         Task {
             do {
@@ -191,8 +214,8 @@ class OpenAIAudioRecordingManager {
                 print("❌ Failed to connect: \(error)")
                 await MainActor.run {
                     self.delegate?.openAITranscriptionDidFail(error: error.localizedDescription)
-                    self.isRecording = false
-                    self.isStartingRecording = false
+                    self.stateManager.transition(to: .idle)
+                    self.cleanupKeyboardHandler()
                 }
             }
         }
@@ -201,10 +224,20 @@ class OpenAIAudioRecordingManager {
     private func startAudioCapture() {
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
-        inputNode.installTap(onBus: 0, bufferSize: 2400, format: recordingFormat) { [weak self] buffer, _ in
-            guard let self = self, self.isRecording else { return }
+        // Set up proper resampling via AVAudioConverter
+        targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: targetSampleRate, channels: 1, interleaved: false)
+        if let targetFormat = targetFormat, recordingFormat.sampleRate != targetSampleRate {
+            audioConverter = AVAudioConverter(from: recordingFormat, to: targetFormat)
+            print("✅ OpenAI: Using AVAudioConverter for resampling \(recordingFormat.sampleRate)Hz → \(targetSampleRate)Hz")
+        } else {
+            audioConverter = nil
+            print("✅ OpenAI: No resampling needed (native \(recordingFormat.sampleRate)Hz)")
+        }
 
-            // Audio level - SAME as Gemini
+        inputNode.installTap(onBus: 0, bufferSize: 2400, format: recordingFormat) { [weak self] buffer, _ in
+            guard let self = self, self.stateManager.activeSource == .openai && self.stateManager.isRecording else { return }
+
+            // Audio level calculation
             if let channelData = buffer.floatChannelData?[0] {
                 let frameLength = Int(buffer.frameLength)
                 var sum: Float = 0
@@ -219,19 +252,23 @@ class OpenAIAudioRecordingManager {
                 }
             }
 
-            // Send audio to OpenAI
+            // Send audio to OpenAI (with proper resampling)
             self.sendAudioToOpenAI(buffer: buffer)
         }
 
         do {
             audioEngine.prepare()
             try audioEngine.start()
+            isEngineRunning = true
+
+            // Transition to recording state
+            stateManager.transition(to: .recording, source: .openai)
             print("🎤 OpenAI audio capture started")
-            isStartingRecording = false
         } catch {
             print("❌ Failed to start audio engine: \(error)")
-            isRecording = false
-            isStartingRecording = false
+            stateManager.transition(to: .idle)
+            cleanupKeyboardHandler()
+            isEngineRunning = false
         }
     }
 
@@ -246,33 +283,23 @@ class OpenAIAudioRecordingManager {
         let frameLength = Int(buffer.frameLength)
         let inputSampleRate = buffer.format.sampleRate
 
-        // Log sample rate on first chunk
+        // Log format on first chunk
         if audioChunkCount == 0 {
-            print("🎵 Input sample rate: \(inputSampleRate) Hz, target: \(targetSampleRate) Hz")
+            print("🎵 Input: \(Int(inputSampleRate))Hz \(buffer.format.channelCount)ch → \(Int(targetSampleRate))Hz mono")
         }
 
         var int16Samples: [Int16] = []
 
-        if inputSampleRate >= targetSampleRate {
-            // Downsample: skip samples
-            let resampleRatio = Int(inputSampleRate / targetSampleRate)
-            int16Samples.reserveCapacity(frameLength / max(resampleRatio, 1))
+        // Manual conversion: take channel 0, downsample (e.g. 48kHz→24kHz = every 2nd sample)
+        // AVAudioConverter doesn't handle multi-channel to mono conversion properly
+        let decimationFactor = max(1, Int(inputSampleRate / targetSampleRate))
+        let outputLength = frameLength / decimationFactor
+        int16Samples.reserveCapacity(outputLength)
 
-            for i in stride(from: 0, to: frameLength, by: resampleRatio) {
-                let sample = floatData[i]
-                let clamped = max(-1.0, min(1.0, sample))
-                int16Samples.append(Int16(clamped * Float(Int16.max)))
-            }
-        } else {
-            // Input rate is lower than target - just convert without resampling
-            // OpenAI API should handle various sample rates
-            int16Samples.reserveCapacity(frameLength)
-
-            for i in 0..<frameLength {
-                let sample = floatData[i]
-                let clamped = max(-1.0, min(1.0, sample))
-                int16Samples.append(Int16(clamped * Float(Int16.max)))
-            }
+        for i in stride(from: 0, to: frameLength, by: decimationFactor) {
+            let sample = floatData[i]
+            let clamped = max(-1.0, min(1.0, sample))
+            int16Samples.append(Int16(clamped * Float(Int16.max)))
         }
 
         let data = int16Samples.withUnsafeBytes { Data($0) }
@@ -284,8 +311,9 @@ class OpenAIAudioRecordingManager {
             }
 
             audioChunkCount += 1
-            if audioChunkCount % 20 == 1 {
-                print("📤 Sending audio chunk #\(audioChunkCount) (\(data.count) bytes)")
+            // Log every 100 chunks (~10 seconds) to reduce noise
+            if audioChunkCount == 1 || audioChunkCount % 100 == 0 {
+                print("📤 Audio chunk #\(audioChunkCount)")
             }
 
             Task {
@@ -299,125 +327,158 @@ class OpenAIAudioRecordingManager {
     }
 
     func stopRecording() {
-        guard isRecording else { return } // Prevent double-stop
-        isRecording = false
+        guard stateManager.activeSource == .openai && stateManager.isRecording else { return }
 
-        audioEngine.stop()
+        // Transition to processing state
+        stateManager.transition(to: .processing, source: .openai)
+
+        // Remove tap first before stopping engine
         inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        isEngineRunning = false
 
-        if let monitor = escapeKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-            escapeKeyMonitor = nil
-        }
+        // Stop keyboard handler for recording mode
+        keyboardHandler.setMode(.inactive)
 
         print("⏹ OpenAI recording stopped, committing audio buffer...")
 
-        // Manually commit the audio buffer so server processes whatever we sent
+        // With server VAD, transcription is handled via onFinalTranscript callback (set in setupAndConnectOpenAI)
+        // Timeout fallback in case VAD doesn't trigger
         if #available(macOS 14.0, *) {
-            Task {
-                try? await realtimeTranscriber?.commitAudioBuffer()
-                print("📦 Audio buffer committed manually")
-            }
-        }
+            print("⏳ Waiting for final transcription...")
 
-        // Wait for transcription to arrive before disconnecting (max 3 seconds)
-        let waitStart = Date()
-        let maxWait: TimeInterval = 3.0
-
-        func checkAndFinalize() {
-            let transcription = self.fullTranscription
-            let elapsed = Date().timeIntervalSince(waitStart)
-
-            // If we have transcription OR timeout reached, finalize
-            if !transcription.isEmpty || elapsed >= maxWait {
-                if #available(macOS 14.0, *) {
-                    self.realtimeTranscriber?.disconnect()
-                    self.realtimeTranscriber = nil
-                }
-
-                DispatchQueue.main.async { [weak self] in
-                    if !transcription.isEmpty {
-                        let processed = TextReplacements.shared.processText(transcription)
-                        print("✅ OpenAI transcription: \"\(processed)\"")
-                        TranscriptionHistory.shared.addEntry(processed)
-                        self?.delegate?.openAITranscriptionDidComplete(text: processed)
-                        // Enable space bar to continue
-                        self?.enableSpaceBarContinue()
-                    } else {
-                        print("No transcription generated (waited \(String(format: "%.1f", elapsed))s)")
-                        self?.delegate?.openAIRecordingWasSkippedDueToSilence()
-                    }
-                }
-            } else {
-                // Keep waiting
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    checkAndFinalize()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                guard let self = self else { return }
+                // Only trigger timeout if we haven't already processed
+                if self.realtimeTranscriber != nil {
+                    print("⏰ TIMEOUT - using collected deltas")
+                    self.deltasLock.lock()
+                    let transcription = self.transcriptionDeltas.joined()
+                    self.deltasLock.unlock()
+                    self.handleTranscriptionComplete(transcription)
                 }
             }
-        }
-
-        // Start checking after a brief delay for commit to send
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            checkAndFinalize()
         }
     }
 
-    func cancelRecording() {
-        isRecording = false
-        audioEngine.stop()
-        inputNode.removeTap(onBus: 0)
+    /// Handles transcription completion (called by final transcript callback or timeout)
+    private func handleTranscriptionComplete(_ transcription: String) {
+        // Prevent double-processing
+        guard realtimeTranscriber != nil else { return }
 
-        if let monitor = escapeKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-            escapeKeyMonitor = nil
-        }
+        // Stop audio capture FIRST to prevent "realtimeTranscriber is nil" spam
+        inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        isEngineRunning = false
+
+        // Transition to processing state
+        stateManager.transition(to: .processing, source: .openai)
 
         if #available(macOS 14.0, *) {
             realtimeTranscriber?.disconnect()
             realtimeTranscriber = nil
         }
 
-        fullTranscription = ""
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            if !transcription.isEmpty {
+                let processed = TextReplacements.shared.processText(transcription)
+                print("✅ OpenAI transcription: \"\(processed)\"")
+                TranscriptionHistory.shared.addEntry(processed)
+                self.delegate?.openAITranscriptionDidComplete(text: processed)
+                // Enable continue mode
+                self.enableContinueMode()
+            } else {
+                // Join deltas as fallback (thread-safe)
+                self.deltasLock.lock()
+                let fallback = self.transcriptionDeltas.joined()
+                self.deltasLock.unlock()
+                if !fallback.isEmpty {
+                    let processed = TextReplacements.shared.processText(fallback)
+                    print("✅ OpenAI transcription (from deltas): \"\(processed)\"")
+                    TranscriptionHistory.shared.addEntry(processed)
+                    self.delegate?.openAITranscriptionDidComplete(text: processed)
+                    self.enableContinueMode()
+                } else {
+                    print("No transcription generated")
+                    self.delegate?.openAIRecordingWasSkippedDueToSilence()
+                    self.stateManager.transition(to: .idle)
+                    self.cleanupKeyboardHandler()
+                }
+            }
+        }
+    }
+
+    func cancelRecording() {
+        // Remove tap first before stopping engine
+        inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        isEngineRunning = false
+
+        // Stop keyboard handler
+        cleanupKeyboardHandler()
+
+        if #available(macOS 14.0, *) {
+            realtimeTranscriber?.disconnect()
+            realtimeTranscriber = nil
+        }
+
+        // Thread-safe clear
+        deltasLock.lock()
+        transcriptionDeltas.removeAll()
+        deltasLock.unlock()
+
+        // Transition to idle
+        stateManager.transition(to: .idle)
+
         print("OpenAI recording cancelled")
         delegate?.openAIRecordingWasCancelled()
     }
 
-    // MARK: - Space Bar Continue
+    // MARK: - Continue Mode
 
-    private func enableSpaceBarContinue() {
-        canContinueWithSpaceBar = true
+    private func enableContinueMode() {
+        stateManager.transition(to: .continueMode, source: .openai)
         print("⏎ Space=continue, Esc=done")
 
-        // Remove any existing monitor
-        if let monitor = spaceBarContinueMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-
-        // Set up space bar monitor for continuing
-        spaceBarContinueMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self, self.canContinueWithSpaceBar, !self.isRecording else { return }
-
-            if event.keyCode == 49 { // Space bar
-                print("⏎ Continuing recording via Space bar")
-                DispatchQueue.main.async {
-                    self.disableSpaceBarContinue()
-                    self.toggleRecording() // Start new recording
-                }
-            } else if event.keyCode == 53 { // Escape - cancel continue mode
-                print("❌ Continue mode cancelled")
-                DispatchQueue.main.async {
-                    self.disableSpaceBarContinue()
-                }
-            }
-        }
-
+        // Set up keyboard handler for continue mode
+        keyboardHandler.delegate = self
+        keyboardHandler.setMode(.continueMode)
+        isKeyboardDelegateActive = true
     }
 
-    private func disableSpaceBarContinue() {
-        canContinueWithSpaceBar = false
-        if let monitor = spaceBarContinueMonitor {
-            NSEvent.removeMonitor(monitor)
-            spaceBarContinueMonitor = nil
+    private func disableContinueMode() {
+        stateManager.transition(to: .idle)
+        cleanupKeyboardHandler()
+    }
+
+    private func cleanupKeyboardHandler() {
+        if isKeyboardDelegateActive {
+            keyboardHandler.setMode(.inactive)
+            if keyboardHandler.delegate === self {
+                keyboardHandler.delegate = nil
+            }
+            isKeyboardDelegateActive = false
         }
+    }
+
+    // MARK: - KeyboardEventDelegate
+
+    func handleSpaceDoubleTap() {
+        stopRecording()
+    }
+
+    func handleEscapeKey() {
+        cancelRecording()
+    }
+
+    func handleSpaceContinue() {
+        disableContinueMode()
+        toggleRecording() // Start new recording
+    }
+
+    func handleEscapeContinue() {
+        disableContinueMode()
     }
 }

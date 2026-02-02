@@ -46,12 +46,11 @@
 - ✅ Cloud-based transcription using Gemini 2.5 Flash API
 - ✅ WAV audio conversion and base64 encoding
 - ✅ Silence detection and automatic filtering
-- ✅ Mutual exclusion with WhisperKit recording and screen recording
+- ✅ Mutual exclusion with OpenAI recording and screen recording
 - ✅ Transcription history integration
 
 **Keyboard Shortcuts**:
 - **Cmd+Opt+Z**: OpenAI Realtime audio recording (cloud, primary)
-- **Cmd+Opt+Y**: WhisperKit audio recording (offline/local)
 - **Cmd+Opt+X**: Gemini audio recording (cloud)
 - **Cmd+Opt+S**: Text-to-speech with Gemini
 - **Cmd+Opt+C**: Screen recording with video transcription

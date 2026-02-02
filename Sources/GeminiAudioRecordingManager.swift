@@ -13,7 +13,7 @@ protocol GeminiAudioRecordingManagerDelegate: AnyObject {
     func recordingWasSkippedDueToSilence()
 }
 
-class GeminiAudioRecordingManager {
+class GeminiAudioRecordingManager: KeyboardEventDelegate {
     weak var delegate: GeminiAudioRecordingManagerDelegate?
 
     // Audio properties
@@ -23,13 +23,28 @@ class GeminiAudioRecordingManager {
     private let sampleRate: Double = 16000
     private let maxBufferSamples = 16000 * 300  // 5 minutes max to prevent memory explosion
 
-    // Recording state
-    var isRecording = false
-    private var isStartingRecording = false
-    private var escapeKeyMonitor: Any?
+    // Proper resampling via AVAudioConverter
+    private var audioConverter: AVAudioConverter?
+    private var targetFormat: AVAudioFormat?
+
+    // Engine lifecycle serialization
+    private let engineQueue = DispatchQueue(label: "com.supervoice.gemini.audioengine")
+    private var isEngineRunning = false
+
+    // State management - uses centralized state machine
+    private let stateManager = RecordingStateManager.shared
+    private let keyboardHandler = KeyboardEventHandler.shared
+
+    // Track if this manager is the active keyboard delegate
+    private var isKeyboardDelegateActive = false
 
     // Gemini transcriber
     private let geminiTranscriber = GeminiAudioTranscriber()
+
+    /// Public accessor for recording state (for AppDelegate checks)
+    var isRecording: Bool {
+        return stateManager.activeSource == .gemini && stateManager.isRecording
+    }
 
     init() {
         setupAudioEngine()
@@ -103,75 +118,127 @@ class GeminiAudioRecordingManager {
         alert.runModal()
     }
 
+    // MARK: - Recording Control
+
     func toggleRecording() {
-        // Prevent race condition if called while starting
-        if isStartingRecording {
-            return
-        }
-
-        isRecording.toggle()
-
-        if isRecording {
+        // Check current state
+        if stateManager.activeSource == .gemini && stateManager.isRecording {
+            stopRecording()
+        } else if stateManager.canStart(source: .gemini) {
             startRecording()
         } else {
-            stopRecording()
+            print("⚠️ Cannot toggle Gemini recording - state: \(stateManager.currentState)")
         }
     }
 
     func startRecording() {
-        isStartingRecording = true
+        // Transition to starting state
+        guard stateManager.transition(to: .starting, source: .gemini) else {
+            print("❌ Cannot start Gemini recording - invalid state transition")
+            return
+        }
+
         audioBuffer.removeAll()
 
+        // Serialize engine operations to prevent race conditions
+        engineQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            // Wait for any prior engine to fully stop
+            if self.isEngineRunning {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+
+            DispatchQueue.main.async {
+                self.setupAndStartEngine()
+            }
+        }
+    }
+
+    private func setupAndStartEngine() {
         // Create fresh audio engine to avoid state issues
         audioEngine = AVAudioEngine()
         inputNode = audioEngine.inputNode
         configureInputDevice()
 
-        // Set up global Escape key monitor to cancel recording
-        escapeKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 { // 53 is the key code for Escape
-                if self?.isRecording == true {
-                    print("🛑 Gemini recording cancelled by Escape key")
-                    DispatchQueue.main.async {
-                        self?.cancelRecording()
-                    }
-                }
-            }
-        }
+        // Set up keyboard handler for this recording session (escape to cancel only)
+        keyboardHandler.delegate = self
+        keyboardHandler.setMode(.recording)
+        isKeyboardDelegateActive = true
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
+        // Set up proper resampling via AVAudioConverter
+        targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)
+        if let targetFormat = targetFormat, recordingFormat.sampleRate != sampleRate {
+            audioConverter = AVAudioConverter(from: recordingFormat, to: targetFormat)
+            print("✅ Gemini: Using AVAudioConverter for resampling \(recordingFormat.sampleRate)Hz → \(sampleRate)Hz")
+        } else {
+            audioConverter = nil
+            print("✅ Gemini: No resampling needed (native \(recordingFormat.sampleRate)Hz)")
+        }
+
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             guard let self = self else { return }
+            guard self.stateManager.activeSource == .gemini && self.stateManager.isRecording else { return }
 
             let channelData = buffer.floatChannelData?[0]
             let frameLength = Int(buffer.frameLength)
-            let inputSampleRate = buffer.format.sampleRate
 
             if let channelData = channelData {
-                // Collect raw samples
-                let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+                var samples: [Float]
 
-                // Resample to 16kHz
-                if inputSampleRate != self.sampleRate {
-                    let ratio = Int(inputSampleRate / self.sampleRate)
-                    let resampledSamples = stride(from: 0, to: samples.count, by: ratio).map { samples[$0] }
-                    self.audioBuffer.append(contentsOf: resampledSamples)
+                // Resample to 16kHz using AVAudioConverter for accurate resampling
+                if let converter = self.audioConverter, let targetFormat = self.targetFormat {
+                    // Calculate output frame count based on sample rate ratio
+                    let ratio = self.sampleRate / buffer.format.sampleRate
+                    let outputFrameCount = UInt32(ceil(Double(frameLength) * ratio))
+
+                    guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount) else {
+                        print("⚠️ Gemini: Failed to create output buffer")
+                        return
+                    }
+
+                    var error: NSError?
+                    var inputBufferConsumed = false
+                    let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+                        if inputBufferConsumed {
+                            outStatus.pointee = .noDataNow
+                            return nil
+                        }
+                        inputBufferConsumed = true
+                        outStatus.pointee = .haveData
+                        return buffer
+                    }
+
+                    if status == .error, let error = error {
+                        print("⚠️ Gemini: Converter error: \(error.localizedDescription)")
+                        return
+                    }
+
+                    // Extract resampled samples
+                    if let outputData = outputBuffer.floatChannelData?[0] {
+                        samples = Array(UnsafeBufferPointer(start: outputData, count: Int(outputBuffer.frameLength)))
+                    } else {
+                        return
+                    }
                 } else {
-                    self.audioBuffer.append(contentsOf: samples)
+                    // No resampling needed - use raw samples
+                    samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
                 }
+
+                self.audioBuffer.append(contentsOf: samples)
 
                 // Prevent memory explosion from runaway recording
                 if self.audioBuffer.count > self.maxBufferSamples {
                     print("⚠️ Audio buffer limit reached (5 min). Auto-stopping recording.")
                     DispatchQueue.main.async {
-                        self.isRecording = false
                         self.stopRecording()
                     }
                     return
                 }
 
-                // Calculate audio level
+                // Calculate audio level from original buffer
                 let rms = sqrt(channelData.withMemoryRebound(to: Float.self, capacity: frameLength) { ptr in
                     var sum: Float = 0
                     for i in 0..<frameLength {
@@ -191,24 +258,32 @@ class GeminiAudioRecordingManager {
         do {
             audioEngine.prepare()
             try audioEngine.start()
+            isEngineRunning = true
+
+            // Transition to recording state
+            stateManager.transition(to: .recording, source: .gemini)
             print("🎤 Gemini audio recording started...")
-            isStartingRecording = false
         } catch {
             print("Failed to start audio engine: \(error)")
-            isRecording = false
-            isStartingRecording = false
+            stateManager.transition(to: .idle)
+            cleanupKeyboardHandler()
+            isEngineRunning = false
         }
     }
 
     func stopRecording() {
-        audioEngine.stop()
-        inputNode.removeTap(onBus: 0)
+        guard stateManager.activeSource == .gemini && stateManager.isRecording else { return }
 
-        // Remove Escape key monitor
-        if let monitor = escapeKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-            escapeKeyMonitor = nil
-        }
+        // Transition to processing state
+        stateManager.transition(to: .processing, source: .gemini)
+
+        // Remove tap first before stopping engine
+        inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        isEngineRunning = false
+
+        // Stop keyboard handler
+        cleanupKeyboardHandler()
 
         print("⏹ Gemini recording stopped")
         print("Captured \(audioBuffer.count) audio samples")
@@ -218,26 +293,37 @@ class GeminiAudioRecordingManager {
     }
 
     func cancelRecording() {
-        isRecording = false
-        audioEngine.stop()
+        // Remove tap first before stopping engine
         inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        isEngineRunning = false
         audioBuffer.removeAll()
 
-        // Remove Escape key monitor
-        if let monitor = escapeKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-            escapeKeyMonitor = nil
-        }
+        // Stop keyboard handler
+        cleanupKeyboardHandler()
+
+        // Transition to idle
+        stateManager.transition(to: .idle)
 
         print("Gemini recording cancelled")
-
         delegate?.recordingWasCancelled()
+    }
+
+    private func cleanupKeyboardHandler() {
+        if isKeyboardDelegateActive {
+            keyboardHandler.setMode(.inactive)
+            if keyboardHandler.delegate === self {
+                keyboardHandler.delegate = nil
+            }
+            isKeyboardDelegateActive = false
+        }
     }
 
     private func processRecording() {
         guard !audioBuffer.isEmpty else {
             print("No audio recorded")
             delegate?.recordingWasSkippedDueToSilence()
+            stateManager.transition(to: .idle)
             return
         }
 
@@ -247,6 +333,7 @@ class GeminiAudioRecordingManager {
         if durationSeconds < minDurationSeconds {
             print("Recording too short (\(String(format: "%.2f", durationSeconds))s). Skipping transcription.")
             delegate?.recordingWasSkippedDueToSilence()
+            stateManager.transition(to: .idle)
             return
         }
 
@@ -260,6 +347,7 @@ class GeminiAudioRecordingManager {
         if db < silenceThreshold {
             print("Audio too quiet (RMS: \(rms), dB: \(db)). Skipping transcription.")
             delegate?.recordingWasSkippedDueToSilence()
+            stateManager.transition(to: .idle)
             return
         }
 
@@ -271,6 +359,8 @@ class GeminiAudioRecordingManager {
         // Send to Gemini API
         geminiTranscriber.transcribe(audioBuffer: audioBuffer) { [weak self] result in
             DispatchQueue.main.async {
+                guard let self = self else { return }
+
                 switch result {
                 case .success(let transcription):
                     var trimmed = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -284,17 +374,39 @@ class GeminiAudioRecordingManager {
                         TranscriptionHistory.shared.addEntry(trimmed)
 
                         // Notify delegate
-                        self?.delegate?.transcriptionDidComplete(text: trimmed)
+                        self.delegate?.transcriptionDidComplete(text: trimmed)
                     } else {
                         print("No transcription generated (possibly silence)")
-                        self?.delegate?.recordingWasSkippedDueToSilence()
+                        self.delegate?.recordingWasSkippedDueToSilence()
                     }
 
                 case .failure(let error):
                     print("Gemini transcription error: \(error.localizedDescription)")
-                    self?.delegate?.transcriptionDidFail(error: "Gemini transcription failed: \(error.localizedDescription)")
+                    self.delegate?.transcriptionDidFail(error: "Gemini transcription failed: \(error.localizedDescription)")
                 }
+
+                // Transition back to idle
+                self.stateManager.transition(to: .idle)
             }
         }
+    }
+
+    // MARK: - KeyboardEventDelegate
+
+    func handleSpaceDoubleTap() {
+        // Gemini uses single stop via toggle, but support double-tap too
+        stopRecording()
+    }
+
+    func handleEscapeKey() {
+        cancelRecording()
+    }
+
+    func handleSpaceContinue() {
+        // Gemini doesn't use continue mode, but implement for protocol conformance
+    }
+
+    func handleEscapeContinue() {
+        // Gemini doesn't use continue mode, but implement for protocol conformance
     }
 }

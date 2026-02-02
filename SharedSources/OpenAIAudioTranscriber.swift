@@ -191,24 +191,7 @@ public class OpenAIAudioTranscriber {
     // MARK: - Private Helpers
     
     private func loadApiKey() -> String? {
-        if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] {
-            return envKey
-        }
-        
-        let envPath = ".env"
-        guard let envContent = try? String(contentsOfFile: envPath, encoding: .utf8) else {
-            return nil
-        }
-        
-        for line in envContent.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("OPENAI_API_KEY=") {
-                let key = String(trimmed.dropFirst("OPENAI_API_KEY=".count))
-                return key.isEmpty ? nil : key
-            }
-        }
-        
-        return nil
+        return EnvironmentLoader.getApiKey("OPENAI_API_KEY")
     }
     
     private func convertToWAV(audioBuffer: [Float], sampleRate: Int) -> Data? {
@@ -216,21 +199,28 @@ public class OpenAIAudioTranscriber {
             let clamped = max(-1.0, min(1.0, sample))
             return Int16(clamped * Float(Int16.max))
         }
-        
+
+        // Phase 3.2: Add bounds check for WAV format (UInt32 max for data size)
+        let dataSize = int16Samples.count * 2
+        guard dataSize <= Int(UInt32.max) else {
+            print("❌ Audio buffer too large for WAV format (\(dataSize) bytes)")
+            return nil
+        }
+
         let numChannels: UInt16 = 1
         let bitsPerSample: UInt16 = 16
         let byteRate = UInt32(sampleRate) * UInt32(numChannels) * UInt32(bitsPerSample) / 8
         let blockAlign = numChannels * bitsPerSample / 8
-        let dataSize = UInt32(int16Samples.count * 2)
-        let chunkSize = 36 + dataSize
-        
+        let dataSizeU32 = UInt32(dataSize)
+        let chunkSize = 36 + dataSizeU32
+
         var wavData = Data()
-        
+
         // RIFF header
         wavData.append("RIFF".data(using: .ascii)!)
         wavData.append(UInt32(chunkSize).littleEndianData)
         wavData.append("WAVE".data(using: .ascii)!)
-        
+
         // fmt chunk
         wavData.append("fmt ".data(using: .ascii)!)
         wavData.append(UInt32(16).littleEndianData)
@@ -240,15 +230,15 @@ public class OpenAIAudioTranscriber {
         wavData.append(byteRate.littleEndianData)
         wavData.append(blockAlign.littleEndianData)
         wavData.append(bitsPerSample.littleEndianData)
-        
+
         // data chunk
         wavData.append("data".data(using: .ascii)!)
-        wavData.append(dataSize.littleEndianData)
-        
+        wavData.append(dataSizeU32.littleEndianData)
+
         for sample in int16Samples {
             wavData.append(sample.littleEndianData)
         }
-        
+
         return wavData
     }
 }

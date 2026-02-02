@@ -1,6 +1,6 @@
 # Super Voice Assistant
 
-macOS voice assistant with global hotkeys - transcribe speech to text with offline WhisperKit models or cloud-based Gemini API, capture and transcribe screen recordings with visual context for better accuracy on code/technical terms, and read selected text out loud with live Gemini models. Compared to other options, it's faster and more accurate with simple UI/UX.
+macOS voice assistant with global hotkeys - transcribe speech to text with cloud-based OpenAI or Gemini APIs, capture and transcribe screen recordings with visual context for better accuracy on code/technical terms, and read selected text out loud with live Gemini models. Compared to other options, it's faster and more accurate with simple UI/UX.
 
 ## Demo
 
@@ -17,7 +17,6 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 **Voice-to-Text Transcription**
 - Press Command+Option+Z for cloud transcription with OpenAI Realtime API (primary)
 - Press Command+Option+X for cloud transcription with Gemini API
-- Press Command+Option+Y for local offline transcription with WhisperKit
 - Automatic text pasting at cursor position
 - Transcription history with Command+Option+A
 
@@ -75,26 +74,41 @@ The app requires screen recording permission to capture screen content:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/super-voice-assistant.git
+git clone https://github.com/ediestel/super-voice-assistant.git
 cd super-voice-assistant
 
 # Install ffmpeg (required for screen recording)
 brew install ffmpeg
 
-# Set up environment
-cp .env.example .env
-# Edit .env and add your API keys:
-#   OPENAI_API_KEY=your-openai-key (for primary transcription)
-#   GEMINI_API_KEY=your-gemini-key (for TTS, video, and Gemini audio)
+# Set up environment - create .env file with your API keys
+echo "OPENAI_API_KEY=your-openai-key" >> .env
+echo "GEMINI_API_KEY=your-gemini-key" >> .env
 
 # Build the app
 swift build
 
-# Run the main app
+# Run the app
 swift run SuperVoiceAssistant
 ```
 
 The app will appear in your menu bar as a waveform icon.
+
+### Quick Launch Alias (Recommended)
+
+For easy launching from anywhere, add a shell alias:
+
+```bash
+# Add alias to your shell config
+echo 'alias ccc="/path/to/super-voice-assistant/.build/arm64-apple-macosx/debug/SuperVoiceAssistant"' >> ~/.zshrc
+source ~/.zshrc
+
+# Now just run:
+ccc
+```
+
+Replace `/path/to/super-voice-assistant` with your actual project path.
+
+**Note:** The app automatically finds your `.env` file by searching up from the executable location to the project root, so you can run `ccc` from any directory.
 
 ## Configuration
 
@@ -133,18 +147,9 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 4. The transcribed text automatically pastes at your cursor position
 5. Press **Escape** during recording to cancel without transcribing
 
-**Local (WhisperKit - Offline):**
-1. Launch the app - it appears in the menu bar
-2. Open Settings (click menu bar icon > Settings) to download a WhisperKit model
-3. Press **Command+Option+Y** to start recording (menu bar icon shows recording indicator)
-4. Press **Command+Option+Y** again to stop recording and transcribe
-5. The transcribed text automatically pastes at your cursor position
-6. Press **Escape** during recording to cancel without transcribing
-
 **When to use which:**
 - **OpenAI Realtime (Cmd+Option+Z)**: Cloud-based, real-time streaming, best accuracy, space bar controls
 - **Gemini (Cmd+Option+X)**: Cloud-based, good accuracy for complex audio
-- **WhisperKit (Cmd+Option+Y)**: Offline, privacy-focused, no API costs, good for general speech
 
 ### Text-to-Speech
 1. Select any text in any application
@@ -172,7 +177,6 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 - **Command+Option+Z**: Start OpenAI Realtime recording (cloud, primary)
 - **Command+Option+X**: Start/stop Gemini audio recording (cloud)
-- **Command+Option+Y**: Start/stop WhisperKit recording (offline)
 - **Command+Option+S**: Read selected text aloud / Cancel TTS playback
 - **Command+Option+C**: Start/stop screen recording and transcribe
 - **Command+Option+A**: Show transcription history window
@@ -191,27 +195,8 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 # Run the main app
 swift run SuperVoiceAssistant
 
-# List all available WhisperKit models
-swift run ListModels
-
-# Test downloading a model (currently set to distil-whisper_distil-large-v3)
-swift run TestDownload
-
-# Validate downloaded models are complete
-swift run ValidateModels
-
-# Delete all downloaded models
-swift run DeleteModels
-
-# Delete a specific model
-swift run DeleteModel <model-name>
-# Example: swift run DeleteModel distil-large-v3
-
-# Test transcription with a sample audio file
-swift run TestTranscription
-
-# Test live transcription with microphone input
-swift run TestLiveTranscription
+# Or use the alias (if configured)
+ccc
 
 # Test streaming TTS functionality
 swift run TestStreamingTTS
@@ -232,30 +217,25 @@ swift run TranscribeVideo <path-to-video-file>
 
 ## Project Structure
 
-- `Sources/` - Main app code with TTS and video transcription
+- `Sources/` - Main app code
+  - `main.swift` - App entry point and delegate
   - `ScreenRecorder.swift` - Screen recording with ffmpeg
-- `SharedSources/` - Shared components (models, TTS, audio, video)
+  - `OpenAIAudioRecordingManager.swift` - OpenAI recording manager
+  - `GeminiAudioRecordingManager.swift` - Gemini recording manager
+- `SharedSources/` - Shared components
+  - `EnvironmentLoader.swift` - .env file loading with swift-dotenv
+  - `OpenAIRealtimeTranscriber.swift` - OpenAI Realtime API transcription
+  - `GeminiAudioTranscriber.swift` - Gemini API audio transcription
   - `GeminiStreamingPlayer.swift` - Streaming TTS playback engine
   - `GeminiAudioCollector.swift` - Audio collection and WebSocket handling
   - `SmartSentenceSplitter.swift` - Text processing for optimal speech
-  - `AudioDeviceManager.swift` - Audio device configuration
-  - `GeminiAudioTranscriber.swift` - Gemini API audio transcription
   - `VideoTranscriber.swift` - Gemini API video transcription
-- `Sources/` - Main app components
-  - `GeminiAudioRecordingManager.swift` - Gemini audio recording manager
-- `tests/` - Test utilities organized by functionality:
-  - `test-download/` - Model download test
+- `tests/` - Test utilities:
   - `test-streaming-tts/` - TTS functionality test
   - `test-audio-collector/` - Audio collection test
   - `test-sentence-splitter/` - Sentence splitting test
-  - `test-transcription/` - Transcription functionality test
-  - `test-live-transcription/` - Live transcription test
-  - `test-audio-analysis/` - Audio analysis test
-- `tools/` - Utilities for models and media:
-  - `list-models/` - List available WhisperKit models
-  - `validate-models/` - Validate downloaded models
-  - `delete-models/` - Delete all downloaded models
-  - `delete-model/` - Delete a specific model
+  - `test-openai-transcription/` - OpenAI transcription test
+- `tools/` - Utilities:
   - `record-screen/` - Screen recording test tool
   - `transcribe-video/` - Video transcription test tool
 - `scripts/` - Build and icon generation scripts

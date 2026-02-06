@@ -33,6 +33,9 @@ let package = Package(
         .executable(
             name: "TranscribeVideo",
             targets: ["TranscribeVideo"]),
+        .executable(
+            name: "TestVoiceCommands",
+            targets: ["TestVoiceCommands"]),
         .library(
             name: "SharedModels",
             targets: ["SharedModels"])
@@ -83,6 +86,10 @@ let package = Package(
         .executableTarget(
             name: "TranscribeVideo",
             dependencies: [],
-            path: "tools/transcribe-video")
+            path: "tools/transcribe-video"),
+        .executableTarget(
+            name: "TestVoiceCommands",
+            dependencies: ["SharedModels"],
+            path: "tests/test-voice-commands")
     ]
 )

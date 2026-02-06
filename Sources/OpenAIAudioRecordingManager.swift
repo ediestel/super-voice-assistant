@@ -14,7 +14,7 @@ protocol OpenAIAudioRecordingManagerDelegate: AnyObject {
     func openAIRecordingWasSkippedDueToSilence()
 }
 
-class OpenAIAudioRecordingManager: KeyboardEventDelegate {
+class OpenAIAudioRecordingManager: KeyboardEventDelegate, GestureEventDelegate {
     weak var delegate: OpenAIAudioRecordingManagerDelegate?
 
     // Audio properties
@@ -33,12 +33,22 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
     // State management - uses centralized state machine
     private let stateManager = RecordingStateManager.shared
     private let keyboardHandler = KeyboardEventHandler.shared
+    private let gestureHandler = GestureEventHandler.shared
 
     // OpenAI specific
     private var realtimeTranscriber: OpenAIRealtimeTranscriber?
     // Thread-safe delta collection
     private var transcriptionDeltas: [String] = []
     private let deltasLock = NSLock()
+
+    // Voice command detection
+    private let voiceCommandDetector = VoiceCommandDetector()
+    private var voiceCommandsEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "voiceCommandsEnabled")
+    }
+    private var gestureControlsEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "gestureControlsEnabled")
+    }
 
     // Track if this manager is the active keyboard delegate
     private var isKeyboardDelegateActive = false
@@ -51,6 +61,34 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
     init() {
         setupAudioEngine()
         requestMicrophonePermission()
+        setupVoiceCommands()
+        setupGestureControls()
+    }
+
+    private func setupVoiceCommands() {
+        voiceCommandDetector.onCommandDetected = { [weak self] command, phrase in
+            guard let self = self else { return }
+            print("🎤 Voice command: \(phrase)")
+
+            switch command {
+            case .stop, .done:
+                self.stopRecording()
+            case .cancel:
+                self.cancelRecording()
+            case .pause:
+                // Pause not implemented yet - could pause audio capture
+                print("⏸ Pause command (not implemented)")
+            case .resume:
+                if self.stateManager.currentState == .continueMode {
+                    self.handleSpaceContinue()
+                }
+            }
+        }
+    }
+
+    private func setupGestureControls() {
+        // Set this manager as gesture delegate
+        gestureHandler.delegate = self
     }
 
     private func setupAudioEngine() {
@@ -136,6 +174,9 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
         transcriptionDeltas.removeAll()
         deltasLock.unlock()
 
+        // Reset voice command detector
+        voiceCommandDetector.reset()
+
         audioChunkCount = 0
 
         // Serialize engine operations to prevent race conditions
@@ -177,6 +218,12 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
             self.deltasLock.lock()
             self.transcriptionDeltas.append(delta)
             self.deltasLock.unlock()
+
+            // Process for voice commands if enabled
+            if self.voiceCommandsEnabled {
+                self.voiceCommandDetector.processDelta(delta)
+            }
+
             DispatchQueue.main.async {
                 self.delegate?.openAITranscriptionDidReceiveDelta(delta: delta)
             }
@@ -267,6 +314,11 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
             keyboardHandler.delegate = self
             keyboardHandler.setMode(.recording)
             isKeyboardDelegateActive = true
+
+            // Enable gesture controls if configured
+            if gestureControlsEnabled {
+                gestureHandler.startMonitoring()
+            }
 
             print("🎤 OpenAI audio capture started")
         } catch {
@@ -388,7 +440,17 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
             guard let self = self else { return }
 
             if !transcription.isEmpty {
-                let processed = TextReplacements.shared.processText(transcription)
+                // Optionally remove voice commands from transcription
+                var finalText = transcription
+                if self.voiceCommandsEnabled {
+                    let removeCommands = UserDefaults.standard.bool(forKey: "removeVoiceCommandsFromTranscription")
+                    if removeCommands {
+                        finalText = self.voiceCommandDetector.removeCommandText(from: transcription)
+                        print("🎤 Removed voice commands from transcription")
+                    }
+                }
+
+                let processed = TextReplacements.shared.processText(finalText)
                 print("✅ OpenAI transcription: \"\(processed)\"")
                 TranscriptionHistory.shared.addEntry(processed)
                 self.delegate?.openAITranscriptionDidComplete(text: processed)
@@ -397,9 +459,18 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
             } else {
                 // Join deltas as fallback (thread-safe)
                 self.deltasLock.lock()
-                let fallback = self.transcriptionDeltas.joined()
+                var fallback = self.transcriptionDeltas.joined()
                 self.deltasLock.unlock()
+
                 if !fallback.isEmpty {
+                    // Remove voice commands if enabled
+                    if self.voiceCommandsEnabled {
+                        let removeCommands = UserDefaults.standard.bool(forKey: "removeVoiceCommandsFromTranscription")
+                        if removeCommands {
+                            fallback = self.voiceCommandDetector.removeCommandText(from: fallback)
+                        }
+                    }
+
                     let processed = TextReplacements.shared.processText(fallback)
                     print("✅ OpenAI transcription (from deltas): \"\(processed)\"")
                     TranscriptionHistory.shared.addEntry(processed)
@@ -485,5 +556,33 @@ class OpenAIAudioRecordingManager: KeyboardEventDelegate {
 
     func handleEscapeContinue() {
         disableContinueMode()
+    }
+
+    // MARK: - GestureEventDelegate
+
+    func handleThreeFingerSwipeDown() {
+        if stateManager.canStart(source: .openai) {
+            print("👆 Gesture: Starting recording")
+            startRecording()
+        }
+    }
+
+    func handleThreeFingerSwipeUp() {
+        if stateManager.activeSource == .openai && stateManager.isRecording {
+            print("👆 Gesture: Stopping recording")
+            stopRecording()
+        }
+    }
+
+    func handleForceTouch() {
+        print("👆 Gesture: Toggle recording")
+        toggleRecording()
+    }
+
+    func handleFourFingerTap() {
+        if stateManager.activeSource == .openai && stateManager.isRecording {
+            print("👆 Gesture: Cancelling recording")
+            cancelRecording()
+        }
     }
 }

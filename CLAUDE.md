@@ -19,6 +19,43 @@
 
 ## Completed Features
 
+### Voice Commands and Trackpad Gestures
+
+**Status**: ✅ Complete and integrated into main app
+**Documentation**: See `docs/voice-commands-and-gestures.md`
+**Key Files**:
+- `SharedSources/VoiceCommandDetector.swift` - Real-time voice command detection
+- `Sources/GestureEventHandler.swift` - Trackpad gesture monitoring
+- `Sources/OpenAIAudioRecordingManager.swift` - Integration with recording manager
+- `Sources/SettingsWindow.swift` - Settings UI for enabling/configuring features
+
+**Features**:
+- ✅ Voice command detection during recording ("stop recording", "cancel recording", etc.)
+- ✅ Optional command removal from final transcription
+- ✅ Three-finger swipe gestures for start/stop recording
+- ✅ Force touch gesture for toggle recording
+- ✅ Settings UI for enabling and configuring both features
+- ✅ Accessibility permission support for gestures
+- ✅ Cooldown mechanisms to prevent duplicate triggers
+
+**Voice Commands**:
+- "stop recording" / "done recording" - Stops recording and transcribes
+- "cancel recording" / "discard recording" - Cancels without saving
+- "continue recording" / "resume recording" - Starts new recording (in continue mode)
+
+**Trackpad Gestures**:
+- Three-finger swipe down: Start recording
+- Three-finger swipe up: Stop recording
+- Force touch: Toggle recording
+
+**Implementation Notes**:
+- Voice commands work by monitoring real-time transcription deltas
+- Gestures use NSEvent local monitoring (work when app is active)
+- Both integrate seamlessly with existing keyboard shortcuts
+- Settings stored in UserDefaults (voiceCommandsEnabled, gestureControlsEnabled)
+
+## Completed Features
+
 ### Gemini Live TTS Integration
 
 **Status**: ✅ Complete and integrated into main app

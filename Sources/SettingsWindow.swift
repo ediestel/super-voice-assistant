@@ -6,6 +6,9 @@ import SharedModels
 struct SettingsView: View {
     @State private var geminiApiKey: String = ""
     @State private var openaiApiKey: String = ""
+    @AppStorage("voiceCommandsEnabled") private var voiceCommandsEnabled = false
+    @AppStorage("removeVoiceCommandsFromTranscription") private var removeVoiceCommands = true
+    @AppStorage("gestureControlsEnabled") private var gestureControlsEnabled = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,6 +74,74 @@ struct SettingsView: View {
                         }
                         .padding(8)
                     }
+
+                    // Voice Commands Section
+                    GroupBox(label: Label("Voice Commands", systemImage: "waveform.badge.mic")) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle("Enable voice commands during recording", isOn: $voiceCommandsEnabled)
+
+                            if voiceCommandsEnabled {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Available commands:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        CommandRow(command: "\"stop recording\"", action: "Stops recording and transcribes")
+                                        CommandRow(command: "\"cancel recording\"", action: "Cancels recording without saving")
+                                        CommandRow(command: "\"done recording\"", action: "Stops recording and transcribes")
+                                        CommandRow(command: "\"continue recording\"", action: "Starts new recording (in continue mode)")
+                                    }
+                                    .padding(.leading, 12)
+
+                                    Toggle("Remove voice commands from final transcription", isOn: $removeVoiceCommands)
+                                        .padding(.top, 8)
+
+                                    Text("When enabled, voice command phrases will be automatically removed from the transcribed text.")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.top, 4)
+                                }
+                            }
+                        }
+                        .padding(8)
+                    }
+
+                    // Gesture Controls Section
+                    GroupBox(label: Label("Trackpad Gestures", systemImage: "hand.tap")) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle("Enable trackpad gesture controls", isOn: $gestureControlsEnabled)
+                                .onChange(of: gestureControlsEnabled) { _, newValue in
+                                    if newValue {
+                                        GestureEventHandler.shared.startMonitoring()
+                                    } else {
+                                        GestureEventHandler.shared.stopMonitoring()
+                                    }
+                                }
+
+                            if gestureControlsEnabled {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Available gestures:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        GestureRow(gesture: "Three-finger swipe down", action: "Start recording")
+                                        GestureRow(gesture: "Three-finger swipe up", action: "Stop recording")
+                                        GestureRow(gesture: "Force touch", action: "Toggle recording")
+                                        GestureRow(gesture: "Four-finger tap", action: "Cancel recording")
+                                    }
+                                    .padding(.leading, 12)
+
+                                    Text("⚠️ Requires Accessibility permission in System Settings > Privacy & Security > Accessibility")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                        .padding(.top, 4)
+                                }
+                            }
+                        }
+                        .padding(8)
+                    }
                 }
                 .padding()
             }
@@ -88,7 +159,7 @@ struct SettingsView: View {
             }
             .padding()
         }
-        .frame(width: 500, height: 450)
+        .frame(width: 550, height: 700)
         .onAppear {
             // Load API key status from environment
             geminiApiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
@@ -115,10 +186,50 @@ struct ShortcutRow: View {
     }
 }
 
+struct CommandRow: View {
+    let command: String
+    let action: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("•")
+                .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(command)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.primary)
+                Text(action)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
+struct GestureRow: View {
+    let gesture: String
+    let action: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("•")
+                .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(gesture)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                Text(action)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
 class SettingsWindowController: NSWindowController {
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 450),
+            contentRect: NSRect(x: 0, y: 0, width: 550, height: 700),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false

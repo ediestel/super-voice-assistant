@@ -52,6 +52,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
     // State manager for centralized recording state
     private let stateManager = RecordingStateManager.shared
+
+    // Animation support for blinking status indicator
+    private var blinkTimer: Timer?
+    private var isBlinkVisible = true
+    private var currentRecordingState: RecordingState = .idle
+    private var currentRecordingSource: RecordingSource?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility permissions
@@ -95,25 +101,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         // Create the status bar item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        // Set the waveform icon
+        // Set the microphone icon
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
+            button.imagePosition = .imageLeading
+
+            // Add click action
+            button.action = #selector(handleStatusItemClick)
+            button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+            // Set initial tooltip
+            updateTooltip()
         }
-        
+
         // Create menu
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "OpenAI Audio Recording: Press Command+Option+Z", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Gemini Audio Recording: Press Command+Option+X", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "History: Press Command+Option+A", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Read Selected Text: Press Command+Option+S", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Screen Recording: Press Command+Option+C", action: nil, keyEquivalent: ""))
+
+        // Primary action section
+        let startItem = NSMenuItem(title: "▶ Start Recording", action: #selector(handleMenuStartRecording), keyEquivalent: "")
+        startItem.target = self
+        menu.addItem(startItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Other recording options
+        let geminiItem = NSMenuItem(title: "Gemini Recording (⌘⌥X)", action: #selector(handleMenuGeminiRecording), keyEquivalent: "")
+        geminiItem.target = self
+        menu.addItem(geminiItem)
+
+        let screenItem = NSMenuItem(title: "Screen Recording (⌘⌥C)", action: #selector(handleMenuScreenRecording), keyEquivalent: "")
+        screenItem.target = self
+        menu.addItem(screenItem)
+
+        let ttsItem = NSMenuItem(title: "Read Selected Text (⌘⌥S)", action: #selector(handleMenuReadText), keyEquivalent: "")
+        ttsItem.target = self
+        menu.addItem(ttsItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Management options
+        menu.addItem(NSMenuItem(title: "History (⌘⌥A)", action: #selector(showTranscriptionHistory), keyEquivalent: "h"))
+        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Statistics...", action: #selector(showStats), keyEquivalent: "s"))
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Test Auto-Paste", action: #selector(testAutoPaste), keyEquivalent: "t"))
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "View History...", action: #selector(showTranscriptionHistory), keyEquivalent: "h"))
-        menu.addItem(NSMenuItem(title: "Statistics...", action: #selector(showStats), keyEquivalent: "s"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+
         statusItem.menu = menu
         
         // Reset any cached shortcuts first
@@ -225,32 +261,172 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     }
 
     private func handleRecordingStateChange(state: RecordingState, source: RecordingSource?) {
+        currentRecordingState = state
+        currentRecordingSource = source
+
         // Don't update status bar if screen recording is active
-        if screenRecorder.recording { return }
+        if screenRecorder.recording {
+            updateScreenRecordingIndicator()
+            return
+        }
 
         switch state {
         case .idle:
-            // Reset to default icon
+            stopBlinking()
+            // Reset to default microphone icon
             if let button = statusItem.button {
-                button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+                button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
                 button.title = ""
             }
+            updateTooltip()
+
         case .starting, .recording:
-            // Green dot while recording
-            if let button = statusItem.button {
-                button.image = nil
-                button.title = "🟢"
-            }
+            // Start blinking green dot (0.9 second cycle)
+            startBlinking(emoji: "🟢", interval: 0.9)
+            updateTooltip()
+
         case .processing:
-            // Blue dot for processing
-            if let button = statusItem.button {
-                button.image = nil
-                button.title = "🔵"
-            }
+            // Fast blinking blue dot (0.3 second cycle)
+            startBlinking(emoji: "🔵", interval: 0.3)
+            updateTooltip()
+
         case .continueMode:
-            // Yellow dot in continue mode
-            showContinueModeIndicator()
+            // Breathing pulse yellow dot (slower fade)
+            startBlinking(emoji: "🟡", interval: 1.2)
+            updateTooltip()
         }
+    }
+
+    private func updateScreenRecordingIndicator() {
+        // Red blinking for screen recording
+        if screenRecorder.recording {
+            startBlinking(emoji: "🔴", interval: 0.9)
+        } else {
+            stopBlinking()
+            if let button = statusItem.button {
+                button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
+                button.title = ""
+            }
+        }
+        updateTooltip()
+    }
+
+    private func startBlinking(emoji: String, interval: TimeInterval) {
+        stopBlinking()
+
+        isBlinkVisible = true
+        if let button = statusItem.button {
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
+            button.title = emoji
+        }
+
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.isBlinkVisible.toggle()
+
+            if let button = self.statusItem.button {
+                button.title = self.isBlinkVisible ? emoji : ""
+            }
+        }
+    }
+
+    private func stopBlinking() {
+        blinkTimer?.invalidate()
+        blinkTimer = nil
+        isBlinkVisible = true
+    }
+
+    private func updateTooltip() {
+        guard let button = statusItem.button else { return }
+
+        let tooltip: String
+
+        if screenRecorder.recording {
+            tooltip = "🔴 Recording screen...\n• Click to stop\n• Esc to cancel"
+        } else {
+            switch currentRecordingState {
+            case .idle:
+                tooltip = "Click to start recording\n• ⌘⌥Z: OpenAI recording\n• ⌘⌥X: Gemini recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
+
+            case .starting:
+                let sourceName = currentRecordingSource == .openai ? "OpenAI" : "Gemini"
+                tooltip = "🟢 Starting \(sourceName) recording..."
+
+            case .recording:
+                let sourceName = currentRecordingSource == .openai ? "OpenAI" : "Gemini"
+                tooltip = "🟢 Recording (\(sourceName))...\n• Click to stop\n• Space to stop\n• Esc to cancel"
+
+            case .processing:
+                tooltip = "🔵 Processing transcription...\nPlease wait..."
+
+            case .continueMode:
+                tooltip = "🟡 Continue mode ready\n• Space to record again\n• Esc to exit\n• Click to exit"
+            }
+        }
+
+        button.toolTip = tooltip
+    }
+
+    // MARK: - Click Handlers
+
+    @objc func handleStatusItemClick(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else { return }
+
+        if event.type == .rightMouseUp {
+            // Right-click: Show menu
+            statusItem.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.frame.height), in: sender)
+        } else {
+            // Left-click: Toggle recording
+            if screenRecorder.recording {
+                // Stop screen recording
+                toggleScreenRecording()
+            } else if currentRecordingState == .continueMode {
+                // Exit continue mode
+                openaiAudioManager.handleEscapeContinue()
+            } else if openaiAudioManager.isRecording {
+                // Stop OpenAI recording
+                openaiAudioManager.toggleRecording()
+            } else if geminiAudioManager.isRecording {
+                // Stop Gemini recording
+                geminiAudioManager.toggleRecording()
+            } else if currentRecordingState == .idle {
+                // Start OpenAI recording (primary action)
+                if stateManager.canStart(source: .openai) {
+                    targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
+                    openaiAudioManager.toggleRecording()
+                }
+            }
+        }
+    }
+
+    @objc func handleMenuStartRecording() {
+        if currentRecordingState == .idle && stateManager.canStart(source: .openai) {
+            targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
+            openaiAudioManager.toggleRecording()
+        }
+    }
+
+    @objc func handleMenuGeminiRecording() {
+        if !stateManager.canStart(source: .gemini) && !geminiAudioManager.isRecording {
+            let notification = NSUserNotification()
+            notification.title = "Cannot Start Gemini Recording"
+            notification.informativeText = "Another recording is currently active"
+            NSUserNotificationCenter.default.deliver(notification)
+            return
+        }
+
+        if !geminiAudioManager.isRecording {
+            targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
+        }
+        geminiAudioManager.toggleRecording()
+    }
+
+    @objc func handleMenuScreenRecording() {
+        toggleScreenRecording()
+    }
+
+    @objc func handleMenuReadText() {
+        handleReadSelectedTextToggle()
     }
     
 
@@ -397,10 +573,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                     NSUserNotificationCenter.default.deliver(errorNotification)
 
                     // Reset status bar
+                    self.stopBlinking()
                     if let button = self.statusItem.button {
-                        button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+                        button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
                         button.title = ""
                     }
+                    self.updateTooltip()
                 }
             }
 
@@ -421,15 +599,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                     self.currentVideoURL = videoURL
 
                     // Update status bar to show recording indicator
-                    if let button = self.statusItem.button {
-                        button.image = nil
-                        button.title = "🔴"
-                    }
+                    self.updateScreenRecordingIndicator()
 
                     // Show success notification
                     let notification = NSUserNotification()
                     notification.title = "Screen Recording Started"
-                    notification.informativeText = "Press Cmd+Option+C again to stop"
+                    notification.informativeText = "Press Cmd+Option+C again to stop or click menubar"
                     NSUserNotificationCenter.default.deliver(notification)
                     print("🎥 Screen recording STARTED")
 
@@ -595,52 +770,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     }
 
     func showContinueModeIndicator() {
-        if let button = statusItem.button {
-            button.image = nil
-            button.title = "🟡" // Yellow dot in continue mode
-        }
+        // State manager handles visual updates via handleRecordingStateChange
+        // This method kept for compatibility but no longer updates UI directly
     }
-    
+
     func startTranscriptionIndicator() {
-        // Don't update status bar if screen recording is active
-        if screenRecorder.recording {
-            return
-        }
-
-        // Show blue dot for processing
-        if let button = statusItem.button {
-            button.image = nil
-            button.title = "🔵"
-        }
+        // State manager handles visual updates via handleRecordingStateChange
+        // This method kept for compatibility but no longer updates UI directly
     }
-    
-    func stopTranscriptionIndicator() {
-        // Don't update status bar if screen recording is active
-        if screenRecorder.recording {
-            return
-        }
 
-        // Reset to default icon
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
-            button.title = ""
-        }
+    func stopTranscriptionIndicator() {
+        // State manager handles visual updates via handleRecordingStateChange
+        // This method kept for compatibility but no longer updates UI directly
     }
 
     func startVideoProcessingIndicator() {
-        // Show blue dot for video processing
-        if let button = statusItem.button {
-            button.image = nil
-            button.title = "🔵"
-        }
+        // Show fast blinking blue dot for video processing
+        startBlinking(emoji: "🔵", interval: 0.3)
+        updateTooltip()
     }
 
     func stopVideoProcessingIndicator() {
         // Reset to default icon
+        stopBlinking()
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
             button.title = ""
         }
+        updateTooltip()
     }
     
 
@@ -830,7 +987,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     func recordingWasCancelled() {
         stopTranscriptionIndicator()
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
             button.title = ""
         }
 
@@ -843,7 +1000,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     func recordingWasSkippedDueToSilence() {
         stopTranscriptionIndicator()
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
             button.title = ""
         }
 
@@ -883,7 +1040,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     func openAIRecordingWasCancelled() {
         stopTranscriptionIndicator()
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
             button.title = ""
         }
 
@@ -896,7 +1053,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     func openAIRecordingWasSkippedDueToSilence() {
         stopTranscriptionIndicator()
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice Assistant")
             button.title = ""
         }
 

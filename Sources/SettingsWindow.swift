@@ -66,7 +66,7 @@ struct SettingsView: View {
                     // Keyboard Shortcuts Section
                     GroupBox(label: Label("Keyboard Shortcuts", systemImage: "keyboard")) {
                         VStack(alignment: .leading, spacing: 8) {
-                            ShortcutRow(shortcut: "Cmd+Opt+Z", description: "OpenAI audio recording")
+                            ShortcutRow(shortcut: "Ctrl+Space", description: "OpenAI audio recording")
                             ShortcutRow(shortcut: "Cmd+Opt+X", description: "Gemini audio recording")
                             ShortcutRow(shortcut: "Cmd+Opt+S", description: "Read selected text aloud")
                             ShortcutRow(shortcut: "Cmd+Opt+C", description: "Screen recording")

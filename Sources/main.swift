@@ -155,8 +155,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         // Reset any cached shortcuts first
         KeyboardShortcuts.reset(.openaiAudioRecording)
 
-        // Set keyboard shortcuts: Z=OpenAI
-        KeyboardShortcuts.setShortcut(.init(.z, modifiers: [.command, .option]), for: .openaiAudioRecording)
+        // Set keyboard shortcuts: Ctrl+Space=OpenAI
+        KeyboardShortcuts.setShortcut(.init(.space, modifiers: [.control]), for: .openaiAudioRecording)
         // Gemini disabled - uncomment to enable:
         // KeyboardShortcuts.setShortcut(.init(.x, modifiers: [.command, .option]), for: .geminiAudioRecording)
         KeyboardShortcuts.setShortcut(.init(.a, modifiers: [.command, .option]), for: .showHistory)
@@ -165,7 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
         // Debug: Print registered shortcuts
         print("🔧 Shortcuts registered:")
-        print("   Cmd+Opt+Z: OpenAI Realtime")
+        print("   Ctrl+Space: OpenAI Realtime")
         print("   Cmd+Opt+A: History")
         print("   Cmd+Opt+S: TTS")
         print("   Cmd+Opt+C: Screen")
@@ -210,7 +210,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         }
 
         KeyboardShortcuts.onKeyUp(for: .openaiAudioRecording) { [weak self] in
-            print("🟡 Cmd+Opt+Z pressed - OpenAI Realtime!")
+            print("🟡 Ctrl+Space pressed - OpenAI Realtime!")
             guard let self = self else { return }
 
             // Prevent starting OpenAI audio recording if screen recording is active
@@ -346,7 +346,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         } else {
             switch currentRecordingState {
             case .idle:
-                tooltip = "Click to start recording\n• ⌘⌥Z: OpenAI recording\n• ⌘⌥X: Gemini recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
+                tooltip = "Click to start recording\n• Ctrl+Space: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
 
             case .starting:
                 let sourceName = currentRecordingSource == .openai ? "OpenAI" : "Gemini"
@@ -495,7 +495,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         if !screenRecorder.recording && openaiAudioManager.isRecording {
             let notification = NSUserNotification()
             notification.title = "Cannot Start Screen Recording"
-            notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Cmd+Option+Z"
+            notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Ctrl+Space"
             NSUserNotificationCenter.default.deliver(notification)
             print("Blocked screen recording - OpenAI audio recording is active")
             return
@@ -1082,6 +1082,10 @@ func findResourceBundle() -> Bundle? {
     }
     return nil
 }
+
+// Disable stdout buffering so logs appear immediately when redirected to file
+setbuf(stdout, nil)
+setbuf(stderr, nil)
 
 // Create and run the app
 let app = NSApplication.shared

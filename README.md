@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 ## Features
 
 **Voice-to-Text Transcription**
-- Press Command+Option+Z for cloud transcription with OpenAI Realtime API (primary)
+- Press Ctrl+Space for cloud transcription with OpenAI Realtime API (primary)
 - Press Command+Option+X for cloud transcription with Gemini API
 - Automatic text pasting at cursor position
 - Transcription history with Command+Option+A
@@ -51,7 +51,7 @@ The app will automatically request microphone permission on first launch. If den
 
 ### 2. Accessibility Access (Required for Global Hotkeys & Auto-Paste)
 You must manually grant accessibility permissions for the app to:
-- Monitor global keyboard shortcuts (Command+Option+Z/X/Y/S/A/C, Space, Escape)
+- Monitor global keyboard shortcuts (Ctrl+Space, Command+Option+X/S/A/C, Space, Escape)
 - Automatically paste transcribed text at cursor position
 
 **To enable:**
@@ -63,7 +63,7 @@ You must manually grant accessibility permissions for the app to:
    - If running the built binary directly: Add the **SuperVoiceAssistant** executable
 5. Ensure the checkbox next to the app is checked
 
-**Important:** Without accessibility access, the app cannot detect global hotkeys (Command+Option+Z/X/Y/A/S/C, Space, Escape) or paste text automatically.
+**Important:** Without accessibility access, the app cannot detect global hotkeys (Ctrl+Space, Command+Option+X/S/A/C, Space, Escape) or paste text automatically.
 
 ### 3. Screen Recording Access (Required for Video Transcription)
 The app requires screen recording permission to capture screen content:
@@ -134,7 +134,7 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 **Cloud (OpenAI Realtime - Primary):**
 1. Ensure OPENAI_API_KEY is set in your .env file
-2. Press **Command+Option+Z** to start recording (menu bar icon shows recording indicator)
+2. Press **Ctrl+Space** to start recording (menu bar icon shows recording indicator)
 3. Press **Space** to stop recording and transcribe, or **Escape** to cancel
 4. After transcription, press **Space** again to start a new recording (continue mode)
 5. Press **Escape** to exit continue mode
@@ -148,7 +148,7 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 5. Press **Escape** during recording to cancel without transcribing
 
 **When to use which:**
-- **OpenAI Realtime (Cmd+Option+Z)**: Cloud-based, real-time streaming, best accuracy, space bar controls
+- **OpenAI Realtime (Ctrl+Space)**: Cloud-based, real-time streaming, best accuracy, space bar controls
 - **Gemini (Cmd+Option+X)**: Cloud-based, good accuracy for complex audio
 
 ### Text-to-Speech
@@ -175,13 +175,13 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 ### Keyboard Shortcuts
 
-- **Command+Option+Z**: Start OpenAI Realtime recording (cloud, primary)
+- **Ctrl+Space**: Start OpenAI Realtime recording (cloud, primary)
 - **Command+Option+X**: Start/stop Gemini audio recording (cloud)
 - **Command+Option+S**: Read selected text aloud / Cancel TTS playback
 - **Command+Option+C**: Start/stop screen recording and transcribe
 - **Command+Option+A**: Show transcription history window
 
-**During OpenAI Recording (Cmd+Option+Z):**
+**During OpenAI Recording (Ctrl+Space):**
 - **Space**: Stop recording and transcribe
 - **Escape**: Cancel recording (discard)
 

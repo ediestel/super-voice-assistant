@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>SuperVoiceAssistant</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.supervoiceassistant.app</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>SuperVoiceAssistant needs microphone access to record audio for transcription.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>SuperVoiceAssistant uses Apple Speech Recognition to transcribe your voice directly into text so you can paste it into any app.</string>
+</dict>
+</plist>

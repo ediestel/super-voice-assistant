@@ -19,6 +19,7 @@ extension KeyboardShortcuts.Name {
     static let toggleScreenRecording = Self("toggleScreenRecording")
     static let geminiAudioRecording = Self("geminiAudioRecording")
     static let openaiAudioRecording = Self("openaiAudioRecording")
+    static let appleSpeechRecording = Self("appleSpeechRecording")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerDelegate, OpenAIAudioRecordingManagerDelegate {
@@ -48,7 +49,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     private var screenRecorder = ScreenRecorder()
     private var currentVideoURL: URL?
     private var videoTranscriber = VideoTranscriber()
-    private var targetAppBeforeRecording: NSRunningApplication?
+    var targetAppBeforeRecording: NSRunningApplication?
 
     // State manager for centralized recording state
     private let stateManager = RecordingStateManager.shared
@@ -60,6 +61,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     private var currentRecordingSource: RecordingSource?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Show a Dock icon + app-switcher entry (not just the menu-bar item). Set in
+        // code so it takes effect even when LaunchServices has cached an older
+        // LSUIElement value from a previous build.
+        NSApp.setActivationPolicy(.regular)
+
         // Check accessibility permissions
         let trusted = AXIsProcessTrusted()
         print(trusted ? "✅ Accessibility: GRANTED" : "❌ Accessibility: NOT GRANTED")
@@ -138,6 +144,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         ttsItem.target = self
         menu.addItem(ttsItem)
 
+        let appleSpeechItem = NSMenuItem(title: "Apple Speech Panel (⌃Space)", action: #selector(handleMenuAppleSpeech), keyEquivalent: "")
+        appleSpeechItem.target = self
+        menu.addItem(appleSpeechItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Management options
@@ -154,21 +164,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         
         // Reset any cached shortcuts first
         KeyboardShortcuts.reset(.openaiAudioRecording)
+        KeyboardShortcuts.reset(.appleSpeechRecording)
 
-        // Set keyboard shortcuts: Ctrl+Space=OpenAI
-        KeyboardShortcuts.setShortcut(.init(.space, modifiers: [.control]), for: .openaiAudioRecording)
+        // Set keyboard shortcuts: Ctrl+Space=Apple Speech (native), Cmd+Opt+V=OpenAI
+        KeyboardShortcuts.setShortcut(.init(.v, modifiers: [.command, .option]), for: .openaiAudioRecording)
         // Gemini disabled - uncomment to enable:
         // KeyboardShortcuts.setShortcut(.init(.x, modifiers: [.command, .option]), for: .geminiAudioRecording)
         KeyboardShortcuts.setShortcut(.init(.a, modifiers: [.command, .option]), for: .showHistory)
         KeyboardShortcuts.setShortcut(.init(.s, modifiers: [.command, .option]), for: .readSelectedText)
         KeyboardShortcuts.setShortcut(.init(.c, modifiers: [.command, .option]), for: .toggleScreenRecording)
+        KeyboardShortcuts.setShortcut(.init(.space, modifiers: [.control]), for: .appleSpeechRecording)
 
         // Debug: Print registered shortcuts
         print("🔧 Shortcuts registered:")
-        print("   Ctrl+Space: OpenAI Realtime")
+        print("   Ctrl+Space: Apple Speech (native)")
         print("   Cmd+Opt+A: History")
         print("   Cmd+Opt+S: TTS")
         print("   Cmd+Opt+C: Screen")
+        print("   Cmd+Opt+V: OpenAI Realtime")
         
         // Set up keyboard shortcut handlers
         KeyboardShortcuts.onKeyUp(for: .showHistory) { [weak self] in
@@ -210,7 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         }
 
         KeyboardShortcuts.onKeyUp(for: .openaiAudioRecording) { [weak self] in
-            print("🟡 Ctrl+Space pressed - OpenAI Realtime!")
+            print("🟡 Cmd+Opt+V pressed - OpenAI Realtime!")
             guard let self = self else { return }
 
             // Prevent starting OpenAI audio recording if screen recording is active
@@ -220,6 +233,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                 notification.informativeText = "Screen recording is currently active. Stop it first with Cmd+Option+C"
                 NSUserNotificationCenter.default.deliver(notification)
                 print("Blocked OpenAI audio recording - screen recording is active")
+                return
+            }
+
+            // Prevent starting OpenAI audio recording while Apple Speech is listening
+            if AppleSpeechManager.shared.isListening {
+                let notification = NSUserNotification()
+                notification.title = "Cannot Start OpenAI Audio Recording"
+                notification.informativeText = "Apple Speech is currently listening. Stop it first."
+                NSUserNotificationCenter.default.deliver(notification)
+                print("Blocked OpenAI audio recording - Apple Speech is active")
                 return
             }
 
@@ -242,6 +265,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
         KeyboardShortcuts.onKeyUp(for: .toggleScreenRecording) { [weak self] in
             self?.toggleScreenRecording()
+        }
+
+        // Toggle the Apple Speech floating panel / listening session
+        KeyboardShortcuts.onKeyUp(for: .appleSpeechRecording) { [weak self] in
+            guard let self = self else { return }
+
+            // If already listening, Ctrl+Space stops (toggle).
+            if AppleSpeechManager.shared.isListening {
+                AppleSpeechManager.shared.stopListening()
+                return
+            }
+
+            // Mutual exclusion: don't grab the mic while another recorder is active.
+            if self.screenRecorder.recording || self.openaiAudioManager.isRecording || self.geminiAudioManager.isRecording {
+                let notification = NSUserNotification()
+                notification.title = "Cannot Start Apple Speech"
+                notification.informativeText = "Another recording is currently active. Stop it first."
+                NSUserNotificationCenter.default.deliver(notification)
+                print("⚠️ Blocked Apple Speech - another recording is active")
+                return
+            }
+
+            // Capture the target app (e.g. Terminal) before our panel takes focus,
+            // so committed text pastes back into it.
+            self.targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
+            AppleSpeechManager.shared.showPanel()
+            AppleSpeechManager.shared.startListening()
         }
 
         // Set up Gemini audio manager
@@ -346,7 +396,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         } else {
             switch currentRecordingState {
             case .idle:
-                tooltip = "Click to start recording\n• Ctrl+Space: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
+                tooltip = "Click to start recording\n• Ctrl+Space: Apple Speech panel\n• ⌘⌥V: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
 
             case .starting:
                 let sourceName = currentRecordingSource == .openai ? "OpenAI" : "Gemini"
@@ -428,6 +478,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     @objc func handleMenuReadText() {
         handleReadSelectedTextToggle()
     }
+
+    /// Opens the Apple Speech floating panel from the menu bar. Captures the frontmost
+    /// app first (so committed text pastes back into it) and shows the panel without
+    /// auto-starting the mic — the user taps Start / ⌘M when ready.
+    @objc func handleMenuAppleSpeech() {
+        if !AppleSpeechManager.shared.isListening {
+            targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
+        }
+        AppleSpeechManager.shared.showPanel()
+    }
     
 
     
@@ -495,7 +555,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         if !screenRecorder.recording && openaiAudioManager.isRecording {
             let notification = NSUserNotification()
             notification.title = "Cannot Start Screen Recording"
-            notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Ctrl+Space"
+            notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Cmd+Option+V"
             NSUserNotificationCenter.default.deliver(notification)
             print("Blocked screen recording - OpenAI audio recording is active")
             return
@@ -834,6 +894,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             print("❌ Accessibility NOT granted - paste may fail")
         }
 
+        // Re-activate the saved target app (e.g. the CLI) before pasting. Flows like
+        // Apple Speech raise a focused panel that steals keyboard focus to us; without
+        // this, the Accessibility insert below would target our own panel's text view
+        // (the system-wide focused element) instead of the CLI. When the target is
+        // already frontmost (OpenAI/Gemini flows) we skip activation and paste inline,
+        // preserving existing timing.
+        if let target = targetAppBeforeRecording,
+           target.processIdentifier != NSRunningApplication.current.processIdentifier,
+           !target.isActive {
+            print("🎯 Re-activating target app before paste: \(target.localizedName ?? "nil")")
+            target.activate(options: .activateIgnoringOtherApps)
+            // Defer so the target app is frontmost and owns the focused element.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.performPaste(text)
+            }
+            return
+        }
+
+        performPaste(text)
+    }
+
+    /// Inserts `text` into the currently focused element, preferring the Accessibility
+    /// API and falling back to a clipboard Cmd+V. Assumes the intended target app is
+    /// already frontmost (see pasteTextAtCursor, which activates it first).
+    private func performPaste(_ text: String) {
         // First try: Accessibility API (preferred method)
         print("🔄 Trying Accessibility API insert...")
         if insertTextViaAccessibility(text) {
@@ -865,6 +950,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         // AXUIElement is a CFTypeRef, so we can use it directly
         let axElement = element as! AXUIElement
 
+        // DIAGNOSTIC: which app/role actually owns the focused element? If this is us,
+        // the AX insert would land in our own panel (failure mode F2).
+        var elemPID: pid_t = 0
+        AXUIElementGetPid(axElement, &elemPID)
+        let ownerName = NSRunningApplication(processIdentifier: elemPID)?.localizedName ?? "pid \(elemPID)"
+        var roleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(axElement, kAXRoleAttribute as CFString, &roleRef)
+        let role = (roleRef as? String) ?? "?"
+        let isSelf = elemPID == NSRunningApplication.current.processIdentifier
+        print("🔎 AX focused element owner: \(ownerName) role=\(role)\(isSelf ? " ⚠️ THIS IS US" : "")")
+
         let cfText = text as CFTypeRef
         let setError = AXUIElementSetAttributeValue(
             axElement,
@@ -874,6 +970,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
         if setError != .success {
             print("⚠️ Accessibility insertion failed: \(setError.rawValue)")
+            return false
+        }
+
+        // If the focused element was ourselves, this "success" is a false positive —
+        // the text went into our own panel, not the CLI. Treat as failure so the
+        // clipboard path (which activates the real target) runs instead.
+        if isSelf {
+            print("⚠️ AX insert hit our own panel — discarding and falling back")
             return false
         }
 

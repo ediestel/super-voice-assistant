@@ -92,6 +92,8 @@
 - **Cmd+Opt+S**: Text-to-speech with Gemini
 - **Cmd+Opt+C**: Screen recording with video transcription
 - **Cmd+Opt+A**: Show transcription history
+- **Ctrl+Space**: Apple Speech (Native) floating panel — voice to CLI
+- **Cmd+Opt+V**: OpenAI Realtime audio recording (cloud, primary)
 
 **During OpenAI Recording**:
 - **Space**: Stop recording and transcribe
@@ -131,6 +133,32 @@
 **Paste Methods** (in order of preference):
 1. Accessibility API (`AXUIElementSetAttributeValue`) - direct text insertion
 2. Clipboard + Cmd+V (fallback) - copies to clipboard and simulates paste
+
+### Apple Speech (Native) — Voice to CLI
+
+**Status**: ✅ Complete and integrated into main app
+**Key Files**:
+- `SharedSources/AppleSpeechTranscriber.swift` - SFSpeechRecognizer + AVAudioEngine live-dictation wrapper (public API, in `SharedModels`)
+- `Sources/AppleSpeechManager.swift` - NSPanel-hosted manager singleton + `AppleSpeechView` SwiftUI UI
+- `Sources/Info.plist` - `NSSpeechRecognitionUsageDescription` + `NSMicrophoneUsageDescription` (embedded via `-sectcreate` linker flag)
+- `Sources/main.swift` - `appleSpeechRecording` shortcut name, registration, and `onKeyUp` handler
+- `Sources/SettingsWindow.swift` - "Apple Speech (Native)" GroupBox + shortcut row
+
+**Features**:
+- ✅ Ctrl+Space opens a floating panel and starts on-device Apple Speech dictation
+- ✅ Real-time word-by-word streaming into an editable `TextEditor`
+- ✅ Start/Stop (or ⌘M) toggle, Clear, and Send to CLI (Enter) controls
+- ✅ Pastes the (optionally edited) transcript at the cursor via `AppDelegate.pasteTextAtCursor()`
+- ✅ Floating panel survives Mission Control space switches (`.canJoinAllSpaces`)
+- ✅ Permission-denied / recognizer-unavailable errors surfaced in the panel status bar
+
+**Implementation Notes**:
+- `AppleSpeechTranscriber` lives in `SharedModels`, so its protocol/class/init are `public`
+- The transcriber dispatches all delegate callbacks to the main thread
+- Info.plist is embedded into the executable via Package.swift `linkerSettings`
+  (`-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Sources/Info.plist`)
+  and excluded from the target's source set
+- Requires Speech Recognition + Microphone permission (System Settings → Privacy & Security)
 
 ## Fred Intelligence
 

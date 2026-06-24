@@ -15,7 +15,8 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 ## Features
 
 **Voice-to-Text Transcription**
-- Press Ctrl+Space for cloud transcription with OpenAI Realtime API (primary)
+- Press Command+Option+V for cloud transcription with OpenAI Realtime API (primary)
+- Press Ctrl+Space for the Apple Speech (Native) voice-to-CLI panel (on-device)
 - Press Command+Option+X for cloud transcription with Gemini API
 - Automatic text pasting at cursor position
 - Transcription history with Command+Option+A
@@ -134,7 +135,7 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 **Cloud (OpenAI Realtime - Primary):**
 1. Ensure OPENAI_API_KEY is set in your .env file
-2. Press **Ctrl+Space** to start recording (menu bar icon shows recording indicator)
+2. Press **Command+Option+V** to start recording (menu bar icon shows recording indicator)
 3. Press **Space** to stop recording and transcribe, or **Escape** to cancel
 4. After transcription, press **Space** again to start a new recording (continue mode)
 5. Press **Escape** to exit continue mode
@@ -148,7 +149,7 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 5. Press **Escape** during recording to cancel without transcribing
 
 **When to use which:**
-- **OpenAI Realtime (Ctrl+Space)**: Cloud-based, real-time streaming, best accuracy, space bar controls
+- **OpenAI Realtime (Cmd+Option+V)**: Cloud-based, real-time streaming, best accuracy, space bar controls
 - **Gemini (Cmd+Option+X)**: Cloud-based, good accuracy for complex audio
 
 ### Text-to-Speech
@@ -175,19 +176,49 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 ### Keyboard Shortcuts
 
-- **Ctrl+Space**: Start OpenAI Realtime recording (cloud, primary)
+- **Ctrl+Space**: Open the Apple Speech (Native) floating panel and start listening (on-device)
+- **Command+Option+V**: Start OpenAI Realtime recording (cloud, primary)
 - **Command+Option+X**: Start/stop Gemini audio recording (cloud)
 - **Command+Option+S**: Read selected text aloud / Cancel TTS playback
 - **Command+Option+C**: Start/stop screen recording and transcribe
 - **Command+Option+A**: Show transcription history window
 
-**During OpenAI Recording (Ctrl+Space):**
+**During OpenAI Recording (Cmd+Option+V):**
 - **Space**: Stop recording and transcribe
 - **Escape**: Cancel recording (discard)
 
 **After OpenAI Transcription (Continue Mode):**
 - **Space**: Start new recording
 - **Escape**: Exit continue mode
+
+### Apple Speech (Native) — Voice to CLI
+
+A floating panel powered by Apple's built-in, on-device Speech Recognition
+(`SFSpeechRecognizer`). Spoken words stream live into an editable textarea so you
+can correct the transcript before sending it to the active app (Terminal, iTerm2,
+VS Code, etc.) at the cursor.
+
+**Usage:**
+1. Press **Ctrl+Space** to open the panel; it begins listening immediately.
+2. Speak — words appear word-by-word in the textarea in real time.
+3. Optionally edit the text directly in the panel.
+4. Controls:
+   - **Start / Stop** button or **⌘M** — toggle the recognition session.
+   - **Copy** — put the transcript on the clipboard (paste manually with ⌘V); the
+     transcript area also has the native right-click Cut/Copy/Paste menu.
+   - **Clear** — erase the transcript without closing the panel.
+   - **⌘Enter** or **Send to CLI** — paste the transcript at the cursor in the
+     previously focused app. Plain Enter inserts a line break in the editor. The
+     panel **stays open** for repeated use, so you can keep dictating and sending
+     without reopening it.
+
+Recognition runs **on-device** whenever your locale's speech model supports it, so
+audio stays on your Mac and long dictation isn't cut off at the server session limit.
+
+**First-run permission:** macOS will prompt for Speech Recognition and Microphone
+access. If recognition is unavailable or permission is denied, the panel's status
+bar shows guidance directing you to **System Settings → Privacy & Security →
+Speech Recognition**.
 
 ## Available Commands
 

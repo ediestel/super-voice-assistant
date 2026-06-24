@@ -36,6 +36,9 @@ let package = Package(
         .executable(
             name: "TestVoiceCommands",
             targets: ["TestVoiceCommands"]),
+        .executable(
+            name: "TestAppleSpeech",
+            targets: ["TestAppleSpeech"]),
         .library(
             name: "SharedModels",
             targets: ["SharedModels"])
@@ -55,9 +58,13 @@ let package = Package(
             name: "SuperVoiceAssistant",
             dependencies: ["KeyboardShortcuts", "SharedModels"],
             path: "Sources",
+            exclude: ["Info.plist"],
             resources: [
                 .copy("Assets.xcassets"),
                 .copy("AppIcon.icns")
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "Sources/Info.plist"])
             ]),
         .executableTarget(
             name: "TestAudioCollector",
@@ -90,6 +97,10 @@ let package = Package(
         .executableTarget(
             name: "TestVoiceCommands",
             dependencies: ["SharedModels"],
-            path: "tests/test-voice-commands")
+            path: "tests/test-voice-commands"),
+        .executableTarget(
+            name: "TestAppleSpeech",
+            dependencies: ["SharedModels"],
+            path: "tests/test-apple-speech")
     ]
 )

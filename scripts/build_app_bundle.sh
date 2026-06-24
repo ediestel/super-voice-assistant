@@ -118,11 +118,13 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Super Voice Assistant</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Super Voice Assistant needs microphone access to record and transcribe your voice.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Super Voice Assistant uses Apple Speech Recognition to transcribe your voice directly into text so you can paste it into any app.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Super Voice Assistant needs to control other applications to paste transcribed text.</string>
     <key>NSSupportsAutomaticTermination</key>

@@ -2,3 +2,17 @@
 .build/
 .vscode/
 .env
+
+# Build output
+build/
+/SuperVoiceAssistant
+
+# Runtime data
+data/
+
+# Local tooling / agent caches
+.claude/
+.ffrw/
+.fred/
+.gitnexus/
+.artifact-read-session.json

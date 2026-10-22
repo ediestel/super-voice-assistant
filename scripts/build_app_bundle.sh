@@ -118,7 +118,7 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
-    <false/>
+    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Super Voice Assistant</string>
     <key>NSMicrophoneUsageDescription</key>
@@ -150,7 +150,13 @@ echo ""
 # Step 7: Code signing (optional, ad-hoc for local use)
 echo -e "${BLUE}Step 7: Code signing...${NC}"
 if command -v codesign &> /dev/null; then
-    codesign --force --deep --sign - "${BUNDLE_DIR}"
+    # A fixed local identity keeps the Accessibility grant across rebuilds; ad-hoc
+    # signing ties it to one build's hash.
+    SIGN_IDENTITY="-"
+    if security find-certificate -c "SuperVoice Local Signing" >/dev/null 2>&1; then
+        SIGN_IDENTITY="SuperVoice Local Signing"
+    fi
+    codesign --force --deep --sign "${SIGN_IDENTITY}" "${BUNDLE_DIR}"
     echo -e "${GREEN}✅ App bundle signed (ad-hoc)${NC}"
 else
     echo -e "${YELLOW}⚠️  codesign not found, skipping signature${NC}"

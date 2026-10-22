@@ -23,6 +23,8 @@ public final class AppleSpeechTranscriber {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
+    // Counts sessions so the cancel error from a session we stopped is not reported.
+    private var session = 0
 
     public private(set) var isListening = false
 
@@ -62,6 +64,8 @@ public final class AppleSpeechTranscriber {
             request.requiresOnDeviceRecognition = true
         }
         recognitionRequest = request
+        session += 1
+        let id = session
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
@@ -74,6 +78,8 @@ public final class AppleSpeechTranscriber {
                 if final { self.teardown() }
             }
             if let error {
+                // Stopping cancels the task, which reports a cancel error: not a failure.
+                guard id == self.session, self.recognitionTask != nil else { return }
                 DispatchQueue.main.async {
                     self.delegate?.speechTranscriber(self, didFailWithError: error)
                 }

@@ -30,8 +30,9 @@ final class AppleSpeechManager: NSObject, ObservableObject, NSWindowDelegate {
 
     func showPanel() {
         if panel == nil { panel = buildPanel() }
-        panel?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // Shown without taking focus: the target app keeps the keyboard. The panel
+        // becomes key only when its text is clicked for editing.
+        panel?.orderFrontRegardless()
     }
 
     private func buildPanel() -> NSPanel {
@@ -45,6 +46,7 @@ final class AppleSpeechManager: NSObject, ObservableObject, NSWindowDelegate {
         )
         p.title = "Apple Speech \u{2014} Voice to CLI"
         p.isFloatingPanel = true
+        p.becomesKeyOnlyIfNeeded = true
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.isReleasedWhenClosed = false
@@ -114,11 +116,22 @@ final class AppleSpeechManager: NSObject, ObservableObject, NSWindowDelegate {
     /// panel opened), so the text lands in the CLI without dismissing the panel.
     func commitText() {
         let text = transcriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else {
+            if isListening { stopListening() }
+            return
+        }
         // Re-capture the target now (the CLI is still frontmost behind our
         // non-activating panel) in case focus changed since listening started.
         captureTargetApp()
         if isListening { stopListening() }
+        // If the panel was clicked for editing it holds the keyboard; give it back to the
+        // target app so the paste lands there, then show the panel again without focus.
+        if panel?.isKeyWindow == true {
+            panel?.orderOut(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                self?.panel?.orderFrontRegardless()
+            }
+        }
         // Brief delay so the target app is frontmost before the paste fires.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             (NSApp.delegate as? AppDelegate)?.pasteTextAtCursor(text)
@@ -178,7 +191,7 @@ extension AppleSpeechManager: AppleSpeechTranscriberDelegate {
         isListening = false
         statusMessage = transcriptionText.isEmpty
             ? "Press \u{2303}Space or tap Start to begin speaking"
-            : "Done — edit or press ⌘↵ to send"
+            : "Done — press \u{2303}Space or ⌘↵ to send"
     }
 
     func speechTranscriber(_ t: AppleSpeechTranscriber, didFailWithError error: Error) {

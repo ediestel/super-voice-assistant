@@ -7,6 +7,7 @@ import Combine
 import ApplicationServices
 import Foundation
 import CoreGraphics
+import ServiceManagement
 
 // Environment variable loading - uses shared EnvironmentLoader
 func loadEnvironmentVariables() {
@@ -61,10 +62,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     private var currentRecordingSource: RecordingSource?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Show a Dock icon + app-switcher entry (not just the menu-bar item). Set in
-        // code so it takes effect even when LaunchServices has cached an older
-        // LSUIElement value from a previous build.
-        NSApp.setActivationPolicy(.regular)
+        // Runs in the background: menu-bar item only, no Dock icon. Set in code so it
+        // takes effect even when LaunchServices has cached an older LSUIElement value.
+        NSApp.setActivationPolicy(.accessory)
+
+        // Start at login.
+        if SMAppService.mainApp.status != .enabled {
+            do { try SMAppService.mainApp.register() } catch { print("⚠️ Login item: \(error.localizedDescription)") }
+        }
 
         // Check accessibility permissions
         let trusted = AXIsProcessTrusted()
@@ -271,11 +276,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         KeyboardShortcuts.onKeyUp(for: .appleSpeechRecording) { [weak self] in
             guard let self = self else { return }
 
-            // If already listening, Ctrl+Space stops (toggle).
-            if AppleSpeechManager.shared.isListening {
-                AppleSpeechManager.shared.stopListening()
+            // If listening, or recognition already ended on its own with text waiting,
+            // Ctrl+Space sends the text to the target app.
+            let speech = AppleSpeechManager.shared
+            if speech.isListening || !speech.transcriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                print("⌃Space: send (listening=\(speech.isListening))")
+                speech.commitText()
                 return
             }
+            print("⌃Space: start listening")
 
             // Mutual exclusion: don't grab the mic while another recorder is active.
             if self.screenRecorder.recording || self.openaiAudioManager.isRecording || self.geminiAudioManager.isRecording {
@@ -919,15 +928,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     /// API and falling back to a clipboard Cmd+V. Assumes the intended target app is
     /// already frontmost (see pasteTextAtCursor, which activates it first).
     private func performPaste(_ text: String) {
-        // First try: Accessibility API (preferred method)
-        print("🔄 Trying Accessibility API insert...")
-        if insertTextViaAccessibility(text) {
-            print("✅ Inserted via Accessibility API")
-            return
-        }
-
-        // Fallback: Clipboard + Cmd+V
-        print("⚠️ Accessibility insert failed, falling back to clipboard paste")
+        // Clipboard + Cmd+V only. The Accessibility insert reports success in web views
+        // (e.g. a Tauri/WKWebView textarea) without the text arriving there.
         pasteViaClipboard(text)
         print("📋 pasteViaClipboard completed")
     }
@@ -1015,11 +1017,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             return
         }
 
-        // Activate target app
+        // Activate target app (only when it is not already frontmost: no wait otherwise)
         print("🎯 Target app: \(targetApp?.localizedName ?? "nil") (bundleID: \(targetApp?.bundleIdentifier ?? "nil"))")
-        print("🎯 Activating target app...")
-        targetApp?.activate(options: .activateIgnoringOtherApps)
-        usleep(150000) // 150ms - give app time to activate
+        if let targetApp, !targetApp.isActive {
+            print("🎯 Activating target app...")
+            targetApp.activate(options: .activateIgnoringOtherApps)
+            usleep(150000) // 150ms - give app time to activate
+        }
+
+        // Wait (bounded) until the hotkey modifiers are released: a still-held Ctrl from
+        // Ctrl+Space would turn the synthetic Cmd+V into Ctrl+Cmd+V, which does not paste.
+        let held: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+        let deadline = Date().addingTimeInterval(1.0)
+        while Date() < deadline,
+              !CGEventSource.flagsState(.combinedSessionState).intersection(held).isEmpty {
+            usleep(5000)
+        }
 
         // Send Cmd+V
         print("📤 Sending Cmd+V...")

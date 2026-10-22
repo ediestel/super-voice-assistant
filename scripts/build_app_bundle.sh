@@ -36,7 +36,8 @@ echo -e "${BLUE}Step 1: Building executable (${BUILD_CONFIG})...${NC}"
 cd "${PROJECT_DIR}"
 
 if [ "$BUILD_CONFIG" = "release" ]; then
-    swift build -c release --arch arm64 --arch x86_64
+    # Only the app product: building every target pulls in the test executables.
+    swift build -c release --arch arm64 --arch x86_64 --product "${APP_NAME}"
     EXECUTABLE_PATH="${BUILD_DIR}/apple/Products/Release/${APP_NAME}"
 
     # Fallback to architecture-specific path if universal build not available

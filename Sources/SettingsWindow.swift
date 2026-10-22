@@ -66,7 +66,7 @@ struct SettingsView: View {
                     // Keyboard Shortcuts Section
                     GroupBox(label: Label("Keyboard Shortcuts", systemImage: "keyboard")) {
                         VStack(alignment: .leading, spacing: 8) {
-                            ShortcutRow(shortcut: "Ctrl+Space", description: "Apple Speech panel (native)")
+                            ShortcutRow(shortcut: "Fn+Ctrl+Opt", description: "Conversation mode: on / send turn / off")
                             ShortcutRow(shortcut: "Cmd+Opt+V", description: "OpenAI audio recording")
                             ShortcutRow(shortcut: "Cmd+Opt+X", description: "Gemini audio recording")
                             ShortcutRow(shortcut: "Cmd+Opt+S", description: "Read selected text aloud")
@@ -147,7 +147,7 @@ struct SettingsView: View {
                     // Apple Speech (Native) Section
                     GroupBox(label: Label("Apple Speech (Native)", systemImage: "waveform")) {
                         VStack(alignment: .leading, spacing: 8) {
-                            ShortcutRow(shortcut: "Ctrl+Space", description: "Open panel and start listening")
+                            ShortcutRow(shortcut: "Menu bar", description: "Apple Speech Panel")
                             Text("Uses Apple’s built-in on-device Speech Recognition. Spoken words stream live into a floating textarea where you can edit, then press ⌘↵ or ‘Send to CLI’ to paste at the cursor. The panel stays open for repeated use.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)

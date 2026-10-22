@@ -14,7 +14,7 @@ final class AppleSpeechManager: NSObject, ObservableObject, NSWindowDelegate {
 
     @Published var transcriptionText = ""
     @Published var isListening = false
-    @Published var statusMessage = "Press \u{2303}Space or tap Start to begin speaking"
+    @Published var statusMessage = "Tap Start to begin speaking"
     @Published var statusIsError = false
 
     private var transcriber: AppleSpeechTranscriber?
@@ -149,7 +149,7 @@ final class AppleSpeechManager: NSObject, ObservableObject, NSWindowDelegate {
     func clearText() {
         transcriptionText = ""
         if !isListening {
-            setStatus("Press \u{2303}Space or tap Start to begin speaking", isError: false)
+            setStatus("Tap Start to begin speaking", isError: false)
         }
     }
 
@@ -190,8 +190,8 @@ extension AppleSpeechManager: AppleSpeechTranscriberDelegate {
     func speechTranscriberDidStopListening(_ t: AppleSpeechTranscriber) {
         isListening = false
         statusMessage = transcriptionText.isEmpty
-            ? "Press \u{2303}Space or tap Start to begin speaking"
-            : "Done — press \u{2303}Space or ⌘↵ to send"
+            ? "Tap Start to begin speaking"
+            : "Done — press ⌘↵ to send"
     }
 
     func speechTranscriber(_ t: AppleSpeechTranscriber, didFailWithError error: Error) {

@@ -60,8 +60,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     private var isBlinkVisible = true
     private var currentRecordingState: RecordingState = .idle
     private var currentRecordingSource: RecordingSource?
+    private var conversationHotkey: FnControlOptionHotkey?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Line-buffer stdout so logs appear immediately when redirected to a file.
+        setvbuf(stdout, nil, _IOLBF, 0)
+
         // Runs in the background: menu-bar item only, no Dock icon. Set in code so it
         // takes effect even when LaunchServices has cached an older LSUIElement value.
         NSApp.setActivationPolicy(.accessory)
@@ -149,7 +153,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         ttsItem.target = self
         menu.addItem(ttsItem)
 
-        let appleSpeechItem = NSMenuItem(title: "Apple Speech Panel (⌃Space)", action: #selector(handleMenuAppleSpeech), keyEquivalent: "")
+        let conversationItem = NSMenuItem(title: "Conversation Mode (fn⌃⌥)", action: #selector(handleMenuConversationMode), keyEquivalent: "")
+        conversationItem.target = self
+        menu.addItem(conversationItem)
+
+        let appleSpeechItem = NSMenuItem(title: "Apple Speech Panel", action: #selector(handleMenuAppleSpeech), keyEquivalent: "")
         appleSpeechItem.target = self
         menu.addItem(appleSpeechItem)
 
@@ -171,18 +179,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         KeyboardShortcuts.reset(.openaiAudioRecording)
         KeyboardShortcuts.reset(.appleSpeechRecording)
 
-        // Set keyboard shortcuts: Ctrl+Space=Apple Speech (native), Cmd+Opt+V=OpenAI
+        // Set keyboard shortcuts: Cmd+Opt+V=OpenAI
         KeyboardShortcuts.setShortcut(.init(.v, modifiers: [.command, .option]), for: .openaiAudioRecording)
         // Gemini disabled - uncomment to enable:
         // KeyboardShortcuts.setShortcut(.init(.x, modifiers: [.command, .option]), for: .geminiAudioRecording)
         KeyboardShortcuts.setShortcut(.init(.a, modifiers: [.command, .option]), for: .showHistory)
         KeyboardShortcuts.setShortcut(.init(.s, modifiers: [.command, .option]), for: .readSelectedText)
         KeyboardShortcuts.setShortcut(.init(.c, modifiers: [.command, .option]), for: .toggleScreenRecording)
-        KeyboardShortcuts.setShortcut(.init(.space, modifiers: [.control]), for: .appleSpeechRecording)
+        // Apple Speech has no shortcut (⌃Space removed); conversation mode uses Fn+⌃⌥ below.
 
         // Debug: Print registered shortcuts
         print("🔧 Shortcuts registered:")
-        print("   Ctrl+Space: Apple Speech (native)")
+        print("   Fn+Ctrl+Opt: Conversation mode")
         print("   Cmd+Opt+A: History")
         print("   Cmd+Opt+S: TTS")
         print("   Cmd+Opt+C: Screen")
@@ -272,35 +280,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             self?.toggleScreenRecording()
         }
 
-        // Toggle the Apple Speech floating panel / listening session
-        KeyboardShortcuts.onKeyUp(for: .appleSpeechRecording) { [weak self] in
-            guard let self = self else { return }
-
-            // If listening, or recognition already ended on its own with text waiting,
-            // Ctrl+Space sends the text to the target app.
-            let speech = AppleSpeechManager.shared
-            if speech.isListening || !speech.transcriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                print("⌃Space: send (listening=\(speech.isListening))")
-                speech.commitText()
-                return
-            }
-            print("⌃Space: start listening")
-
-            // Mutual exclusion: don't grab the mic while another recorder is active.
-            if self.screenRecorder.recording || self.openaiAudioManager.isRecording || self.geminiAudioManager.isRecording {
-                let notification = NSUserNotification()
-                notification.title = "Cannot Start Apple Speech"
-                notification.informativeText = "Another recording is currently active. Stop it first."
-                NSUserNotificationCenter.default.deliver(notification)
-                print("⚠️ Blocked Apple Speech - another recording is active")
-                return
-            }
-
-            // Capture the target app (e.g. Terminal) before our panel takes focus,
-            // so committed text pastes back into it.
-            self.targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
-            AppleSpeechManager.shared.showPanel()
-            AppleSpeechManager.shared.startListening()
+        // Fn+⌃⌥: hands-free conversation mode (live typing, auto-send after silence)
+        ConversationMode.shared.onActiveChange = { [weak self] active in
+            guard let self, let button = self.statusItem.button else { return }
+            button.image = NSImage(systemSymbolName: active ? "waveform.circle.fill" : "mic.fill",
+                                   accessibilityDescription: "Voice Assistant")
+        }
+        conversationHotkey = FnControlOptionHotkey { [weak self] in
+            self?.toggleConversationMode()
         }
 
         // Set up Gemini audio manager
@@ -405,7 +392,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         } else {
             switch currentRecordingState {
             case .idle:
-                tooltip = "Click to start recording\n• Ctrl+Space: Apple Speech panel\n• ⌘⌥V: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
+                tooltip = "Click to start recording\n• fn⌃⌥: Conversation mode (on / send / off)\n• ⌘⌥V: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
 
             case .starting:
                 let sourceName = currentRecordingSource == .openai ? "OpenAI" : "Gemini"
@@ -496,6 +483,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             targetAppBeforeRecording = NSWorkspace.shared.frontmostApplication
         }
         AppleSpeechManager.shared.showPanel()
+    }
+
+    @objc func handleMenuConversationMode() {
+        toggleConversationMode()
+    }
+
+    /// Fn+⌃⌥ / menu: start conversation mode, send the pending turn, or stop it.
+    private func toggleConversationMode() {
+        let conversation = ConversationMode.shared
+        // Mutual exclusion: don't grab the mic while another recorder is active.
+        if !conversation.isActive && (screenRecorder.recording || openaiAudioManager.isRecording || geminiAudioManager.isRecording) {
+            let notification = NSUserNotification()
+            notification.title = "Cannot Start Conversation Mode"
+            notification.informativeText = "Another recording is currently active. Stop it first."
+            NSUserNotificationCenter.default.deliver(notification)
+            print("⚠️ Blocked conversation mode - another recording is active")
+            return
+        }
+        conversation.handleHotkey()
     }
     
 

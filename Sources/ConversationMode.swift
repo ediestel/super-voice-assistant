@@ -6,10 +6,10 @@ import SharedModels
 
 /// Hands-free turn-by-turn dictation into whatever text field has the cursor
 /// (e.g. a chat with an LLM). Words are typed live as they are recognized; the turn
-/// is sent with Return after `silenceBeforeSend` seconds without new words, or at once
-/// when Fn+⌃⌥ is pressed. Listening then continues for the next turn.
+/// is sent with Return after `silenceBeforeSend` seconds without new words. Listening
+/// then continues for the next turn.
 ///
-/// Fn+⌃⌥: off → on; on with an unsent turn → send it now; on with nothing typed → off.
+/// Fn+⌃⌥: off → on; on → off. Turning off never presses Return; unsent text stays in the field.
 final class ConversationMode {
 
     static let shared = ConversationMode()
@@ -39,12 +39,10 @@ final class ConversationMode {
 
     func handleHotkey() {
         print("🗣 Conversation hotkey (active=\(isActive), turnHasText=\(turnHasText))")
-        if !isActive {
-            start()
-        } else if turnHasText {
-            sendTurn()
-        } else {
+        if isActive {
             stop()
+        } else {
+            start()
         }
     }
 

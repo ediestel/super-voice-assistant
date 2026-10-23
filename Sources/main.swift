@@ -489,7 +489,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         toggleConversationMode()
     }
 
-    /// Fn+⌃⌥ / menu: start conversation mode, send the pending turn, or stop it.
+    /// Fn+⌃⌥ / menu: turn conversation mode on or off.
     private func toggleConversationMode() {
         let conversation = ConversationMode.shared
         // Mutual exclusion: don't grab the mic while another recorder is active.

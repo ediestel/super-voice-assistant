@@ -102,9 +102,9 @@ For talking to a chat window (an LLM, a messenger) without touching the keyboard
 1. Click into the text field you want to fill.
 2. Press **Fn+Ctrl+Option** (a "Tink" sound plays). Speak; words are typed live into the field.
 3. Pause: after **7 seconds** without new words the app presses **Return**, which sends the turn.
-   It keeps listening for your next turn. The same three keys turn it off; Space plays no part.
-4. Press **Fn+Ctrl+Option** while a turn is unsent to send it at once.
-5. Press **Fn+Ctrl+Option** when nothing is typed to turn the mode off ("Pop" sound).
+   It keeps listening for your next turn. Space plays no part.
+4. Press **Fn+Ctrl+Option** again to turn the mode off ("Pop" sound). This works at any time and
+   never presses Return: words not yet sent stay in the field.
 
 Recognition uses Apple Speech in your system language and runs on-device whenever that language
 supports it. If the microphone becomes unavailable (for example while the input device changes
@@ -198,7 +198,7 @@ app is started from Finder or at login.
 
 | Shortcut | Action | Needs |
 |---|---|---|
-| Fn+Ctrl+Option (the three keys together) | Conversation mode, hands-off: on / send turn now / off. No other key is involved | nothing |
+| Fn+Ctrl+Option (the three keys together) | Conversation mode, hands-off: on / off. No other key is involved | nothing |
 | Cmd+Option+V | OpenAI recording | OpenAI key |
 | Space twice / Escape | During OpenAI recording only: stop and transcribe / discard | |
 | Space / Escape | In OpenAI continue mode only: next recording / leave continue mode | |

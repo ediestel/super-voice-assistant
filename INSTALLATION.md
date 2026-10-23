@@ -116,7 +116,7 @@ Settings…) shows each key as *Configured* or *Not configured*.
 
 1. **Conversation mode (no key):** click into any text field (Notes, a chat), press
    **Fn+Ctrl+Option**, say a sentence. The words appear as you speak; after 7 seconds of silence
-   Return is pressed. Press **Fn+Ctrl+Option** again on an empty turn to turn it off.
+   Return is pressed. Press **Fn+Ctrl+Option** again to turn it off.
 2. **Apple Speech panel (no key):** right-click → **Apple Speech Panel** → **Start** (or ⌘M),
    speak, correct, **⌘Return** to paste into the app you came from.
 3. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **double-tap Space**. The text is

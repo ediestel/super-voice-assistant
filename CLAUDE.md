@@ -92,7 +92,8 @@
 - **Cmd+Opt+S**: Text-to-speech with Gemini
 - **Cmd+Opt+C**: Screen recording with video transcription
 - **Cmd+Opt+A**: Show transcription history
-- **Ctrl+Space**: Apple Speech (Native) floating panel — voice to CLI
+- **Fn+Ctrl+Option**: Hands-free conversation mode (Apple Speech, on-device)
+- **Menu bar → Apple Speech Panel**: Apple Speech (Native) floating panel — voice to CLI (no shortcut)
 - **Cmd+Opt+V**: OpenAI Realtime audio recording (cloud, primary)
 
 **During OpenAI Recording**:
@@ -141,11 +142,13 @@
 - `SharedSources/AppleSpeechTranscriber.swift` - SFSpeechRecognizer + AVAudioEngine live-dictation wrapper (public API, in `SharedModels`)
 - `Sources/AppleSpeechManager.swift` - NSPanel-hosted manager singleton + `AppleSpeechView` SwiftUI UI
 - `Sources/Info.plist` - `NSSpeechRecognitionUsageDescription` + `NSMicrophoneUsageDescription` (embedded via `-sectcreate` linker flag)
-- `Sources/main.swift` - `appleSpeechRecording` shortcut name, registration, and `onKeyUp` handler
-- `Sources/SettingsWindow.swift` - "Apple Speech (Native)" GroupBox + shortcut row
+- `Sources/main.swift` - `handleMenuAppleSpeech` ("Apple Speech Panel" menu item); the former Ctrl+Space shortcut was removed
+- `Sources/SettingsWindow.swift` - "Apple Speech (Native)" GroupBox + menu bar row
+- `Sources/ConversationMode.swift` - hands-free conversation mode + `FnControlOptionHotkey` (Fn+Ctrl+Option)
 
 **Features**:
-- ✅ Ctrl+Space opens a floating panel and starts on-device Apple Speech dictation
+- ✅ "Apple Speech Panel" menu item opens a floating panel; Start / ⌘M begins on-device dictation
+- ✅ Fn+Ctrl+Option conversation mode types words live into the focused field and sends each turn with Return after 7 s of silence
 - ✅ Real-time word-by-word streaming into an editable `TextEditor`
 - ✅ Start/Stop (or ⌘M) toggle, Clear, and Send to CLI (Enter) controls
 - ✅ Pastes the (optionally edited) transcript at the cursor via `AppDelegate.pasteTextAtCursor()`
@@ -159,6 +162,8 @@
   (`-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Sources/Info.plist`)
   and excluded from the target's source set
 - Requires Speech Recognition + Microphone permission (System Settings → Privacy & Security)
+- `startListening()` throws `AppleSpeechError.audioInputUnavailable` when the input format is 0 Hz / 0 channels
+  (input device changing, e.g. sleep/wake); `installTap` would otherwise raise an uncatchable NSException
 
 ## Fred Intelligence
 

@@ -16,7 +16,8 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 
 **Voice-to-Text Transcription**
 - Press Command+Option+V for cloud transcription with OpenAI Realtime API (primary)
-- Press Ctrl+Space for the Apple Speech (Native) voice-to-CLI panel (on-device)
+- Press Fn+Ctrl+Option for hands-free conversation mode with Apple Speech (on-device)
+- Open the Apple Speech (Native) voice-to-CLI panel from the menu bar (on-device)
 - Press Command+Option+X for cloud transcription with Gemini API
 - Automatic text pasting at cursor position
 - Transcription history with Command+Option+A
@@ -52,7 +53,7 @@ The app will automatically request microphone permission on first launch. If den
 
 ### 2. Accessibility Access (Required for Global Hotkeys & Auto-Paste)
 You must manually grant accessibility permissions for the app to:
-- Monitor global keyboard shortcuts (Ctrl+Space, Command+Option+X/S/A/C, Space, Escape)
+- Monitor global keyboard shortcuts (Fn+Ctrl+Option, Command+Option+X/S/A/C, Space, Escape)
 - Automatically paste transcribed text at cursor position
 
 **To enable:**
@@ -64,7 +65,7 @@ You must manually grant accessibility permissions for the app to:
    - If running the built binary directly: Add the **SuperVoiceAssistant** executable
 5. Ensure the checkbox next to the app is checked
 
-**Important:** Without accessibility access, the app cannot detect global hotkeys (Ctrl+Space, Command+Option+X/S/A/C, Space, Escape) or paste text automatically.
+**Important:** Without accessibility access, the app cannot detect global hotkeys (Fn+Ctrl+Option, Command+Option+X/S/A/C, Space, Escape) or paste text automatically.
 
 ### 3. Screen Recording Access (Required for Video Transcription)
 The app requires screen recording permission to capture screen content:
@@ -93,6 +94,10 @@ swift run SuperVoiceAssistant
 ```
 
 The app will appear in your menu bar as a waveform icon.
+
+The app bundle (`build/SuperVoiceAssistant.app`) runs as a menu-bar-only app (no Dock icon while running) and
+registers itself to start at login. It is not restarted automatically after Quit or a crash: start it again
+from Finder, or keep the app in the Dock as a launcher.
 
 ### Quick Launch Alias (Recommended)
 
@@ -176,7 +181,7 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 ### Keyboard Shortcuts
 
-- **Ctrl+Space**: Open the Apple Speech (Native) floating panel and start listening (on-device)
+- **Fn+Ctrl+Option**: Hands-free conversation mode (Apple Speech, on-device); see below
 - **Command+Option+V**: Start OpenAI Realtime recording (cloud, primary)
 - **Command+Option+X**: Start/stop Gemini audio recording (cloud)
 - **Command+Option+S**: Read selected text aloud / Cancel TTS playback
@@ -199,7 +204,8 @@ can correct the transcript before sending it to the active app (Terminal, iTerm2
 VS Code, etc.) at the cursor.
 
 **Usage:**
-1. Press **Ctrl+Space** to open the panel; it begins listening immediately.
+1. Choose **Apple Speech Panel** from the menu bar menu to open the panel, then press
+   **Start** or **⌘M** to begin listening.
 2. Speak — words appear word-by-word in the textarea in real time.
 3. Optionally edit the text directly in the panel.
 4. Controls:
@@ -219,6 +225,20 @@ audio stays on your Mac and long dictation isn't cut off at the server session l
 access. If recognition is unavailable or permission is denied, the panel's status
 bar shows guidance directing you to **System Settings → Privacy & Security →
 Speech Recognition**.
+
+### Conversation Mode (Hands-Free)
+
+Hands-free, turn-by-turn dictation into whatever text field has the cursor (for example a
+chat with an LLM), using on-device Apple Speech.
+
+- Words are typed live into the focused field as they are recognized.
+- A turn is sent with Return after 7 seconds without new words; listening then continues
+  for the next turn.
+- **Fn+Ctrl+Option**: off → on; on with an unsent turn → send it now; on with nothing
+  typed → off.
+- If no usable microphone input is available (for example while the input device changes
+  during sleep/wake), conversation mode turns off and shows a notification instead of
+  crashing the app.
 
 ## Available Commands
 

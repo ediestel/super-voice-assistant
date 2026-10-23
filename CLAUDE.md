@@ -79,7 +79,7 @@
 - `Sources/GeminiAudioRecordingManager.swift` - Audio recording manager for Gemini
 
 **Features**:
-- ✅ Cmd+Opt+X keyboard shortcut for Gemini audio recording and transcription
+- ✅ Gemini audio recording and transcription (menu bar item; Cmd+Opt+X shortcut disabled by default)
 - ✅ Cloud-based transcription using Gemini 2.5 Flash API
 - ✅ WAV audio conversion and base64 encoding
 - ✅ Silence detection and automatic filtering
@@ -87,8 +87,7 @@
 - ✅ Transcription history integration
 
 **Keyboard Shortcuts**:
-- **Cmd+Opt+Z**: OpenAI Realtime audio recording (cloud, primary)
-- **Cmd+Opt+X**: Gemini audio recording (cloud)
+- **Cmd+Opt+X**: Gemini audio recording (cloud) — disabled by default (commented out in `main.swift`); menu bar item still works
 - **Cmd+Opt+S**: Text-to-speech with Gemini
 - **Cmd+Opt+C**: Screen recording with video transcription
 - **Cmd+Opt+A**: Show transcription history
@@ -112,7 +111,7 @@
 - `Sources/OpenAIAudioRecordingManager.swift` - Audio recording manager for OpenAI
 
 **Features**:
-- ✅ Cmd+Opt+Z keyboard shortcut for OpenAI audio recording
+- ✅ Cmd+Opt+V keyboard shortcut for OpenAI audio recording
 - ✅ Real-time streaming transcription via WebSocket
 - ✅ Space bar to stop recording (easier than key combo)
 - ✅ Space bar continue mode (start new recording after transcription)

@@ -88,7 +88,7 @@ Once launched, the app runs in the menu bar (top-right corner).
 
 **Start OpenAI Recording:**
 ```
-Press: Cmd+Opt+Z
+Press: Cmd+Opt+V
 Speak your text
 Press: Space (double-tap) to stop
 → Text auto-pastes at cursor
@@ -96,7 +96,7 @@ Press: Space (double-tap) to stop
 
 **Start Gemini Recording:**
 ```
-Press: Cmd+Opt+X
+Menu bar → Gemini Recording   (Cmd+Opt+X is disabled by default)
 Speak your text
 Automatic stop when you finish speaking
 → Text auto-pastes at cursor
@@ -246,8 +246,8 @@ SuperVoiceAssistant.app/
 ## 📊 Features Summary
 
 ### Keyboard Shortcuts
-- **Cmd+Opt+Z**: OpenAI Realtime recording
-- **Cmd+Opt+X**: Gemini audio recording
+- **Cmd+Opt+V**: OpenAI Realtime recording
+- **Cmd+Opt+X**: Gemini audio recording (disabled by default; start it from the menu bar item **Gemini Recording**)
 - **Cmd+Opt+S**: Read selected text aloud (Gemini TTS)
 - **Cmd+Opt+C**: Screen recording with video transcription
 - **Cmd+Opt+A**: Show transcription history

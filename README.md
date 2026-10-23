@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 - Press Command+Option+V for cloud transcription with OpenAI Realtime API (primary)
 - Press Fn+Ctrl+Option for hands-free conversation mode with Apple Speech (on-device)
 - Open the Apple Speech (Native) voice-to-CLI panel from the menu bar (on-device)
-- Press Command+Option+X for cloud transcription with Gemini API
+- Cloud transcription with Gemini API from the menu bar (its Command+Option+X shortcut is disabled by default)
 - Automatic text pasting at cursor position
 - Transcription history with Command+Option+A
 
@@ -53,7 +53,7 @@ The app will automatically request microphone permission on first launch. If den
 
 ### 2. Accessibility Access (Required for Global Hotkeys & Auto-Paste)
 You must manually grant accessibility permissions for the app to:
-- Monitor global keyboard shortcuts (Fn+Ctrl+Option, Command+Option+X/S/A/C, Space, Escape)
+- Monitor global keyboard shortcuts (Fn+Ctrl+Option, Command+Option+V/S/A/C, Space, Escape)
 - Automatically paste transcribed text at cursor position
 
 **To enable:**
@@ -65,7 +65,7 @@ You must manually grant accessibility permissions for the app to:
    - If running the built binary directly: Add the **SuperVoiceAssistant** executable
 5. Ensure the checkbox next to the app is checked
 
-**Important:** Without accessibility access, the app cannot detect global hotkeys (Fn+Ctrl+Option, Command+Option+X/S/A/C, Space, Escape) or paste text automatically.
+**Important:** Without accessibility access, the app cannot detect global hotkeys (Fn+Ctrl+Option, Command+Option+V/S/A/C, Space, Escape) or paste text automatically.
 
 ### 3. Screen Recording Access (Required for Video Transcription)
 The app requires screen recording permission to capture screen content:
@@ -148,8 +148,9 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 **Cloud (Gemini API):**
 1. Ensure GEMINI_API_KEY is set in your .env file
-2. Press **Command+Option+X** to start recording (menu bar icon shows recording indicator)
-3. Press **Command+Option+X** again to stop recording and transcribe
+2. Choose **Gemini Recording** from the menu bar menu to start recording (menu bar icon shows recording indicator)
+3. Choose it again to stop recording and transcribe
+   (the Command+Option+X shortcut is disabled by default; see `Sources/main.swift` to enable it)
 4. The transcribed text automatically pastes at your cursor position
 5. Press **Escape** during recording to cancel without transcribing
 
@@ -183,7 +184,7 @@ This is useful for correcting common speech-to-text misrecognitions, especially 
 
 - **Fn+Ctrl+Option**: Hands-free conversation mode (Apple Speech, on-device); see below
 - **Command+Option+V**: Start OpenAI Realtime recording (cloud, primary)
-- **Command+Option+X**: Start/stop Gemini audio recording (cloud)
+- **Command+Option+X**: Gemini audio recording (cloud) (disabled by default; start it from the menu bar item **Gemini Recording**)
 - **Command+Option+S**: Read selected text aloud / Cancel TTS playback
 - **Command+Option+C**: Start/stop screen recording and transcribe
 - **Command+Option+A**: Show transcription history window

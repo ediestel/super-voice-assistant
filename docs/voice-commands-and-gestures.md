@@ -62,7 +62,7 @@ Transcription: "I need to schedule a meeting for tomorrow at 3pm."
 
 ### Limitations
 
-- Only works during active OpenAI recording (Cmd+Opt+Z)
+- Only works during active OpenAI recording (Cmd+Opt+V)
 - Commands detected in transcription stream (slight delay)
 - Requires clear speech for accurate detection
 - May interfere if you're dictating about "recording" topics
@@ -143,7 +143,7 @@ For best results, grant Accessibility permission:
 
 - **Local Monitoring**: Gestures only work when app is active/focused
   - System-wide gesture monitoring is not fully supported by macOS for custom apps
-  - Use keyboard shortcuts (Cmd+Opt+Z) for global control
+  - Use keyboard shortcuts (Cmd+Opt+V) for global control
 - **Force Touch**: Requires MacBook with Force Touch trackpad (2015+)
 - **Conflicts**: Some gestures may conflict with system gestures
   - Go to System Settings → Trackpad to check/disable conflicting gestures
@@ -190,7 +190,7 @@ For Magic Mouse users, two-finger swipe gestures can be enabled programmatically
 
 **Solutions:**
 1. Verify voice commands are enabled in Settings
-2. Check that you're using OpenAI recording (Cmd+Opt+Z), not Gemini
+2. Check that you're using OpenAI recording (Cmd+Opt+V), not Gemini
 3. Speak commands clearly and wait 1-2 seconds
 4. Check console output for "🎤 Voice command detected:" messages
 
@@ -203,7 +203,7 @@ For Magic Mouse users, two-finger swipe gestures can be enabled programmatically
 2. Ensure app window is active or click status bar icon first
 3. Grant Accessibility permission in System Settings
 4. Check System Settings → Trackpad for conflicting gestures
-5. Try keyboard shortcuts instead (Cmd+Opt+Z) for global control
+5. Try keyboard shortcuts instead (Cmd+Opt+V) for global control
 
 ### Commands Appearing in Transcription
 
@@ -231,7 +231,7 @@ For Magic Mouse users, two-finger swipe gestures can be enabled programmatically
 
 Voice commands and gestures **complement** keyboard shortcuts, they don't replace them:
 
-- **Cmd+Opt+Z** - Still the primary method for starting OpenAI recording
+- **Cmd+Opt+V** - Still the primary method for starting OpenAI recording
 - **Space (double-tap)** - Still works to stop recording
 - **Escape** - Still works to cancel recording
 

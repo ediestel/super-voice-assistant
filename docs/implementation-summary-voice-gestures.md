@@ -196,7 +196,7 @@ Test 6: Case insensitivity
 
 **Recommended Testing Commands**:
 1. Enable voice commands in settings
-2. Start recording with Cmd+Opt+Z
+2. Start recording with Cmd+Opt+V
 3. Say "stop recording" → should stop and transcribe
 4. Check transcription does not include "stop recording"
 
@@ -287,7 +287,7 @@ Test 6: Case insensitivity
 
 **Keyboard Shortcuts Still Primary**:
 - Voice commands and gestures are **supplementary**, not replacements
-- Cmd+Opt+Z still recommended for reliable control
+- Cmd+Opt+V still recommended for reliable control
 - Gestures require trackpad (excludes some users)
 - Voice commands require speech (excludes some users)
 
@@ -368,7 +368,7 @@ OpenAIAudioRecordingManager (SuperVoiceAssistant)
 
 ### Voice Commands
 
-1. **OpenAI Only**: Only works with OpenAI recording (Cmd+Opt+Z), not Gemini
+1. **OpenAI Only**: Only works with OpenAI recording (Cmd+Opt+V), not Gemini
    - **Reason**: Gemini doesn't provide real-time transcription deltas
    - **Future**: Add Gemini support when API supports it
 

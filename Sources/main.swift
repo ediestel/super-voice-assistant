@@ -141,7 +141,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         menu.addItem(NSMenuItem.separator())
 
         // Other recording options
-        let geminiItem = NSMenuItem(title: "Gemini Recording (⌘⌥X)", action: #selector(handleMenuGeminiRecording), keyEquivalent: "")
+        let geminiItem = NSMenuItem(title: "Gemini Recording", action: #selector(handleMenuGeminiRecording), keyEquivalent: "")
         geminiItem.target = self
         menu.addItem(geminiItem)
 

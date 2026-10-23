@@ -68,7 +68,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             ShortcutRow(shortcut: "Fn+Ctrl+Opt", description: "Conversation mode: on / send turn / off")
                             ShortcutRow(shortcut: "Cmd+Opt+V", description: "OpenAI audio recording")
-                            ShortcutRow(shortcut: "Cmd+Opt+X", description: "Gemini audio recording")
+                            ShortcutRow(shortcut: "Menu bar", description: "Gemini audio recording")
                             ShortcutRow(shortcut: "Cmd+Opt+S", description: "Read selected text aloud")
                             ShortcutRow(shortcut: "Cmd+Opt+C", description: "Screen recording")
                             ShortcutRow(shortcut: "Cmd+Opt+A", description: "Show transcription history")

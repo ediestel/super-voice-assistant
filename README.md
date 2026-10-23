@@ -102,7 +102,7 @@ For talking to a chat window (an LLM, a messenger) without touching the keyboard
 1. Click into the text field you want to fill.
 2. Press **Fn+Ctrl+Option** (a "Tink" sound plays). Speak; words are typed live into the field.
 3. Pause: after **7 seconds** without new words the app presses **Return**, which sends the turn.
-   There is no stop key and no Space; it keeps listening for your next turn.
+   It keeps listening for your next turn. The same three keys turn it off; Space plays no part.
 4. Press **Fn+Ctrl+Option** while a turn is unsent to send it at once.
 5. Press **Fn+Ctrl+Option** when nothing is typed to turn the mode off ("Pop" sound).
 

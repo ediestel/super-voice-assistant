@@ -56,6 +56,13 @@ public final class AppleSpeechTranscriber {
         }
         teardown() // cancel any existing session
 
+        // While the input device changes (sleep/wake, headset reconnect) the input format can
+        // read as 0 Hz / 0 channels; installTap then raises an NSException Swift cannot catch.
+        let format = audioEngine.inputNode.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw AppleSpeechError.audioInputUnavailable
+        }
+
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         // Keep recognition on-device when the locale model supports it: private
@@ -91,7 +98,6 @@ public final class AppleSpeechTranscriber {
         // Defensive: remove any tap left over from a rapid stop/start before re-adding,
         // since installing a second tap on the same bus throws.
         inputNode.removeTap(onBus: 0)
-        let format = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buf, _ in
             self?.recognitionRequest?.append(buf)
         }
@@ -127,11 +133,14 @@ public final class AppleSpeechTranscriber {
 
 public enum AppleSpeechError: LocalizedError {
     case recognizerUnavailable
+    case audioInputUnavailable
 
     public var errorDescription: String? {
         switch self {
         case .recognizerUnavailable:
             return "Speech recognizer unavailable. Check your internet connection and ensure Speech Recognition is enabled in System Settings → Privacy & Security."
+        case .audioInputUnavailable:
+            return "No usable microphone input right now. Check the input device in System Settings → Sound and try again."
         }
     }
 }

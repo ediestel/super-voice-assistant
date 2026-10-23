@@ -1,6 +1,6 @@
 # Voice Commands and Trackpad Gestures
 
-Two optional ways to control the **OpenAI realtime recording** (Cmd+Option+V) without the
+Two optional ways to control the **OpenAI recording** (Cmd+Option+V) without the
 keyboard. Both are off by default and switched on in **Settings** (right-click the menu-bar icon →
 Settings…).
 
@@ -21,8 +21,8 @@ While an OpenAI recording runs, the app watches the last few seconds of the live
 
 | Say | Effect |
 |---|---|
-| "stop", "stop recording", "halt recording", "finish recording" | stops and transcribes (like Space) |
-| "done", "done recording", "that's all", "end recording" | stops and transcribes (like Space) |
+| "stop", "stop recording", "halt recording", "finish recording" | stops and transcribes (like double-tapping Space) |
+| "done", "done recording", "that's all", "end recording" | stops and transcribes (like double-tapping Space) |
 | "cancel", "cancel recording", "discard", "discard recording" | discards the recording (like Escape) |
 | "pause", "pause recording", "hold on" | recognised, but **does nothing** (pause is not implemented) |
 | "continue", "continue recording", "resume", "resume recording", "keep going" | starts the next recording only in continue mode; since nothing is recorded in continue mode, in practice use **Space** |
@@ -82,7 +82,7 @@ before it is pasted.
   Control, App Exposé and switching spaces).
 - Magic Mouse support exists in the code but is never switched on.
 
-Use the keyboard (Cmd+Option+V, Space, Escape) or a left-click on the menu-bar icon for reliable
+Use the keyboard (Cmd+Option+V, double-tap Space, Escape) or a left-click on the menu-bar icon for reliable
 control.
 
 ## Settings reference

@@ -21,14 +21,17 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 
 | Feature | How to start it | Needs | Where the audio goes |
 |---|---|---|---|
-| Conversation mode (hands-free dictation) | **Fn+Ctrl+Option** or menu | nothing | stays on your Mac (on-device Apple Speech where your language supports it) |
-| Apple Speech panel (dictate, edit, send) | menu → **Apple Speech Panel** | nothing | stays on your Mac (as above) |
+| Conversation mode (hands-free, live dictation) | **Fn+Ctrl+Option** or menu | nothing | stays on your Mac (on-device Apple Speech where your language supports it) |
+| Apple Speech panel (live dictation, edit, send) | menu → **Apple Speech Panel** | nothing | stays on your Mac (as above) |
 | History, Statistics, Audio Devices, Settings | **Cmd+Option+A** or menu | nothing | local |
-| Realtime transcription (primary cloud mode) | **Cmd+Option+V**, or left-click the menu-bar icon | `OPENAI_API_KEY` | OpenAI, model `gpt-4o-transcribe` |
+| OpenAI transcription (cloud) | **Cmd+Option+V**, or left-click the menu-bar icon | `OPENAI_API_KEY` | OpenAI, model `gpt-4o-transcribe` |
 | Voice commands ("stop recording" …) | during Cmd+Option+V recording | `OPENAI_API_KEY` | OpenAI |
 | Gemini audio transcription | menu → **Gemini Recording** | `GEMINI_API_KEY` | Google, model `gemini-2.5-flash` |
 | Read selected text aloud | **Cmd+Option+S** | `GEMINI_API_KEY` | Google, Gemini Live native-audio model |
 | Screen recording + transcription | **Cmd+Option+C** | `GEMINI_API_KEY` and `ffmpeg` | Google, model `gemini-2.5-flash` (video with sound) |
+
+Transcription is real-time in both cases. Apple Speech types or shows the words while you
+speak. OpenAI streams the audio while you speak, and pastes the text when you stop.
 
 Without a key the app starts normally. Settings shows which keys are configured. A feature
 whose key is missing fails with a message naming the missing key; the rest keeps working.
@@ -81,7 +84,7 @@ next to it.
 
 | Item | What it does |
 |---|---|
-| ▶ Start Recording | OpenAI realtime recording (same as Cmd+Option+V) |
+| ▶ Start Recording | OpenAI recording (same as Cmd+Option+V) |
 | Gemini Recording | Start / stop a Gemini audio recording |
 | Screen Recording (⌘⌥C) | Start / stop a screen recording that is then transcribed |
 | Read Selected Text (⌘⌥S) | Read the selected text aloud / stop reading |
@@ -92,14 +95,14 @@ next to it.
 | Test Auto-Paste | Pastes a test text at the cursor, to check the Accessibility grant |
 | Quit | Quits the app |
 
-### Conversation mode — hands-free, no key needed
+### Conversation mode — real-time and hands-off, no key needed
 
 For talking to a chat window (an LLM, a messenger) without touching the keyboard.
 
 1. Click into the text field you want to fill.
 2. Press **Fn+Ctrl+Option** (a "Tink" sound plays). Speak; words are typed live into the field.
-3. Stop talking: after **7 seconds** without new words the app presses **Return**, which sends
-   the turn. It keeps listening for your next turn.
+3. Pause: after **7 seconds** without new words the app presses **Return**, which sends the turn.
+   There is no stop key and no Space; it keeps listening for your next turn.
 4. Press **Fn+Ctrl+Option** while a turn is unsent to send it at once.
 5. Press **Fn+Ctrl+Option** when nothing is typed to turn the mode off ("Pop" sound).
 
@@ -121,12 +124,13 @@ For dictating into a terminal or editor where you want to check the text first.
 If permission is missing or recognition is unavailable, the panel's status line tells you where
 to enable it (System Settings → Privacy & Security → Speech Recognition).
 
-### Realtime transcription (OpenAI) — the fastest cloud mode
+### OpenAI transcription (cloud)
 
 1. Put the cursor where the text should go.
 2. Press **Cmd+Option+V** (or left-click the icon) and speak. The audio streams to OpenAI as you
    talk.
-3. Press **Space** to stop and transcribe, or **Escape** to discard.
+3. **Double-tap Space** (two presses within 0.8 s) to stop and transcribe, or press **Escape** to
+   discard. A single Space press does nothing, so you can keep typing spaces while recording.
 4. The text is pasted at the cursor.
 5. You are now in **continue mode**: **Space** starts the next recording, **Escape** leaves
    continue mode.
@@ -194,10 +198,10 @@ app is started from Finder or at login.
 
 | Shortcut | Action | Needs |
 |---|---|---|
-| Fn+Ctrl+Option | Conversation mode: on / send turn now / off | nothing |
-| Cmd+Option+V | OpenAI realtime recording | OpenAI key |
-| Space / Escape | During OpenAI recording: stop and transcribe / discard | |
-| Space / Escape | In continue mode: next recording / leave continue mode | |
+| Fn+Ctrl+Option (the three keys together) | Conversation mode, hands-off: on / send turn now / off. No other key is involved | nothing |
+| Cmd+Option+V | OpenAI recording | OpenAI key |
+| Space twice / Escape | During OpenAI recording only: stop and transcribe / discard | |
+| Space / Escape | In OpenAI continue mode only: next recording / leave continue mode | |
 | Cmd+Option+S | Read selected text aloud / stop | Gemini key |
 | Cmd+Option+C | Screen recording start / stop and transcribe | Gemini key, ffmpeg |
 | Cmd+Option+A | History window | nothing |

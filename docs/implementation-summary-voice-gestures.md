@@ -7,7 +7,7 @@ does not work. User documentation: [voice-commands-and-gestures.md](voice-comman
 
 | Part | State |
 |---|---|
-| Voice command detection during OpenAI realtime recording | works, with false triggers (substring matching) |
+| Voice command detection during OpenAI recording (Realtime API) | works, with false triggers (substring matching) |
 | Stop / done / cancel commands | work |
 | Continue command | wired, but cannot fire in practice (no transcript in continue mode) |
 | Pause command | detected, no action |

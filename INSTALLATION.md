@@ -8,8 +8,8 @@ API keys are **optional**. Without any key you get conversation mode and the App
 
 | Key | Adds |
 |---|---|
-| none | Conversation mode (Fn+Ctrl+Option), Apple Speech panel, history, statistics, audio devices |
-| `OPENAI_API_KEY` | Realtime transcription (Cmd+Option+V, left-click on the icon), voice commands |
+| none | Conversation mode (Fn+Ctrl+Option) and Apple Speech panel, both real-time (words appear as you speak), history, statistics, audio devices |
+| `OPENAI_API_KEY` | OpenAI transcription (Cmd+Option+V, left-click on the icon), voice commands |
 | `GEMINI_API_KEY` | Read selected text aloud (Cmd+Option+S), screen recording transcription (Cmd+Option+C), Gemini audio recording |
 
 ## 1. Before you start
@@ -119,7 +119,7 @@ Settings…) shows each key as *Configured* or *Not configured*.
    Return is pressed. Press **Fn+Ctrl+Option** again on an empty turn to turn it off.
 2. **Apple Speech panel (no key):** right-click → **Apple Speech Panel** → **Start** (or ⌘M),
    speak, correct, **⌘Return** to paste into the app you came from.
-3. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **Space**. The text is
+3. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **double-tap Space**. The text is
    pasted. **Escape** leaves continue mode.
 4. **Read aloud (Gemini key):** select a paragraph, **Cmd+Option+S**. Press again to stop.
 5. **Screen recording (Gemini key + ffmpeg):** **Cmd+Option+C**, talk about what is on screen,

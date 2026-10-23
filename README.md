@@ -1,6 +1,11 @@
 # Super Voice Assistant
 
-macOS voice assistant with global hotkeys - transcribe speech to text with cloud-based OpenAI or Gemini APIs, capture and transcribe screen recordings with visual context for better accuracy on code/technical terms, and read selected text out loud with live Gemini models. Compared to other options, it's faster and more accurate with simple UI/UX.
+A macOS menu-bar app that turns speech into text wherever your cursor is, reads selected text
+aloud, and transcribes screen recordings with what is on screen as context.
+
+It works **without any API key**: on-device Apple Speech gives you hands-free conversation mode
+and a dictation panel, and nothing leaves your Mac. An OpenAI key and a Gemini key are
+**optional**; each one adds its own cloud features (see the table below).
 
 ## Demo
 
@@ -12,287 +17,257 @@ https://github.com/user-attachments/assets/c961f0c6-f3b3-49d9-9b42-7a7d93ee6bc8
 
 https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 
-## Features
+## What works with which key
 
-**Voice-to-Text Transcription**
-- Press Command+Option+V for cloud transcription with OpenAI Realtime API (primary)
-- Press Fn+Ctrl+Option for hands-free conversation mode with Apple Speech (on-device)
-- Open the Apple Speech (Native) voice-to-CLI panel from the menu bar (on-device)
-- Cloud transcription with Gemini API from the menu bar (its Command+Option+X shortcut is disabled by default)
-- Automatic text pasting at cursor position
-- Transcription history with Command+Option+A
+| Feature | How to start it | Needs | Where the audio goes |
+|---|---|---|---|
+| Conversation mode (hands-free dictation) | **Fn+Ctrl+Option** or menu | nothing | stays on your Mac (on-device Apple Speech where your language supports it) |
+| Apple Speech panel (dictate, edit, send) | menu → **Apple Speech Panel** | nothing | stays on your Mac (as above) |
+| History, Statistics, Audio Devices, Settings | **Cmd+Option+A** or menu | nothing | local |
+| Realtime transcription (primary cloud mode) | **Cmd+Option+V**, or left-click the menu-bar icon | `OPENAI_API_KEY` | OpenAI, model `gpt-4o-transcribe` |
+| Voice commands ("stop recording" …) | during Cmd+Option+V recording | `OPENAI_API_KEY` | OpenAI |
+| Gemini audio transcription | menu → **Gemini Recording** | `GEMINI_API_KEY` | Google, model `gemini-2.5-flash` |
+| Read selected text aloud | **Cmd+Option+S** | `GEMINI_API_KEY` | Google, Gemini Live native-audio model |
+| Screen recording + transcription | **Cmd+Option+C** | `GEMINI_API_KEY` and `ffmpeg` | Google, model `gemini-2.5-flash` (video with sound) |
 
-**Streaming Text-to-Speech**
-- Press Command+Option+S to read selected text aloud using Gemini Live API
-- Press Command+Option+S again while reading to cancel the operation
-- Sequential streaming for smooth, natural speech with minimal latency
-- Smart sentence splitting for optimal speech flow
-
-**Screen Recording & Video Transcription**
-- Press Command+Option+C to start/stop screen recording
-- Automatic video transcription using Gemini 2.5 Flash API with visual context
-- Better accuracy for programming terms, code, technical jargon, and ambiguous words
-- Transcribed text automatically pastes at cursor position
+Without a key the app starts normally. Settings shows which keys are configured. A feature
+whose key is missing fails with a message naming the missing key; the rest keeps working.
 
 ## Requirements
 
-- macOS 14.0 or later
-- Xcode 15+ or Xcode Command Line Tools (for Swift 5.9+)
-- OpenAI API key (for primary voice transcription)
-- Gemini API key (for text-to-speech, video transcription, and Gemini audio)
-- ffmpeg (for screen recording functionality)
+- macOS 14 (Sonoma) or later, Apple Silicon or Intel
+- Xcode 15+ or the Xcode Command Line Tools (Swift 5.9+) to build it
+- Optional: an OpenAI API key, a Gemini API key
+- Optional: `ffmpeg` (`brew install ffmpeg`), only for screen recording
 
-## System Permissions Setup
+## Install
 
-This app requires specific system permissions to function properly:
-
-### 1. Microphone Access
-The app will automatically request microphone permission on first launch. If denied, grant it manually:
-- Go to **System Settings > Privacy & Security > Microphone**
-- Enable access for **Super Voice Assistant**
-
-### 2. Accessibility Access (Required for Global Hotkeys & Auto-Paste)
-You must manually grant accessibility permissions for the app to:
-- Monitor global keyboard shortcuts (Fn+Ctrl+Option, Command+Option+V/S/A/C, Space, Escape)
-- Automatically paste transcribed text at cursor position
-
-**To enable:**
-1. Go to **System Settings > Privacy & Security > Accessibility**
-2. Click the lock icon to make changes (enter your password)
-3. Click the **+** button to add an application
-4. Navigate to the app location:
-   - If running via `swift run`: Add **Terminal** or your terminal app (iTerm2, etc.)
-   - If running the built binary directly: Add the **SuperVoiceAssistant** executable
-5. Ensure the checkbox next to the app is checked
-
-**Important:** Without accessibility access, the app cannot detect global hotkeys (Fn+Ctrl+Option, Command+Option+V/S/A/C, Space, Escape) or paste text automatically.
-
-### 3. Screen Recording Access (Required for Video Transcription)
-The app requires screen recording permission to capture screen content:
-- Go to **System Settings > Privacy & Security > Screen Recording**
-- Enable access for **Terminal** (if running via `swift run`) or **SuperVoiceAssistant**
-
-## Installation & Running
+Full guide, including the app bundle, permissions and troubleshooting:
+**[INSTALLATION.md](INSTALLATION.md)**. In short:
 
 ```bash
-# Clone the repository
 git clone https://github.com/ediestel/super-voice-assistant.git
 cd super-voice-assistant
 
-# Install ffmpeg (required for screen recording)
-brew install ffmpeg
-
-# Set up environment - create .env file with your API keys
-echo "OPENAI_API_KEY=your-openai-key" >> .env
-echo "GEMINI_API_KEY=your-gemini-key" >> .env
-
-# Build the app
-swift build
-
-# Run the app
-swift run SuperVoiceAssistant
+# Build the app bundle (release, universal) and install it
+./scripts/build_app_bundle.sh
+cp -R build/SuperVoiceAssistant.app /Applications/
+open /Applications/SuperVoiceAssistant.app
 ```
 
-The app will appear in your menu bar as a waveform icon.
-
-The app bundle (`build/SuperVoiceAssistant.app`) runs as a menu-bar-only app (no Dock icon while running) and
-registers itself to start at login. It is not restarted automatically after Quit or a crash: start it again
-from Finder, or keep the app in the Dock as a launcher.
-
-### Quick Launch Alias (Recommended)
-
-For easy launching from anywhere, add a shell alias:
+Then grant **Accessibility** (needed for the global shortcuts and for pasting), and allow
+**Microphone** and **Speech Recognition** when macOS asks. Optional keys go in `~/.env`:
 
 ```bash
-# Add alias to your shell config
-echo 'alias ccc="/path/to/super-voice-assistant/.build/arm64-apple-macosx/debug/SuperVoiceAssistant"' >> ~/.zshrc
-source ~/.zshrc
-
-# Now just run:
-ccc
+# only the lines for the services you want
+echo "OPENAI_API_KEY=sk-..."   >> ~/.env
+echo "GEMINI_API_KEY=AIza..."  >> ~/.env
 ```
 
-Replace `/path/to/super-voice-assistant` with your actual project path.
+Restart the app after adding or changing a key; keys are read at start.
 
-**Note:** The app automatically finds your `.env` file by searching up from the executable location to the project root, so you can run `ccc` from any directory.
+## Using it
 
-## Configuration
+The app lives in the menu bar as a **microphone** icon (no Dock icon). While conversation mode
+is on, the icon turns into a filled waveform circle; while recording, a blinking status shows
+next to it.
 
-### Text Replacements
+- **Right-click** the icon for the menu.
+- **Left-click** the icon starts or stops the main cloud recording (OpenAI): it stops a running
+  screen recording or recording first, leaves continue mode, and otherwise starts a new
+  OpenAI recording. Without an OpenAI key, use the menu.
 
-You can configure automatic text replacements for transcriptions by editing `config.json` in the project root:
+### The menu
+
+| Item | What it does |
+|---|---|
+| ▶ Start Recording | OpenAI realtime recording (same as Cmd+Option+V) |
+| Gemini Recording | Start / stop a Gemini audio recording |
+| Screen Recording (⌘⌥C) | Start / stop a screen recording that is then transcribed |
+| Read Selected Text (⌘⌥S) | Read the selected text aloud / stop reading |
+| Conversation Mode (fn⌃⌥) | Hands-free dictation on / off |
+| Apple Speech Panel | Floating dictation panel |
+| History (⌘⌥A) | Past transcriptions |
+| Settings… / Statistics… | The manager window with its tabs |
+| Test Auto-Paste | Pastes a test text at the cursor, to check the Accessibility grant |
+| Quit | Quits the app |
+
+### Conversation mode — hands-free, no key needed
+
+For talking to a chat window (an LLM, a messenger) without touching the keyboard.
+
+1. Click into the text field you want to fill.
+2. Press **Fn+Ctrl+Option** (a "Tink" sound plays). Speak; words are typed live into the field.
+3. Stop talking: after **7 seconds** without new words the app presses **Return**, which sends
+   the turn. It keeps listening for your next turn.
+4. Press **Fn+Ctrl+Option** while a turn is unsent to send it at once.
+5. Press **Fn+Ctrl+Option** when nothing is typed to turn the mode off ("Pop" sound).
+
+Recognition uses Apple Speech in your system language and runs on-device whenever that language
+supports it. If the microphone becomes unavailable (for example while the input device changes
+during sleep/wake), the mode turns itself off and shows a notification.
+
+### Apple Speech panel — dictate, correct, then send
+
+For dictating into a terminal or editor where you want to check the text first.
+
+1. Menu → **Apple Speech Panel**. A floating panel opens and stays above other windows.
+2. Press **Start** or **⌘M** and speak; words appear live in the text area.
+3. Correct the text in the panel if needed. Plain Return makes a new line.
+4. **⌘Return** or **Send to CLI** pastes the text at the cursor in the app you were using before.
+   **Copy** puts it on the clipboard, **Clear** empties the panel. The panel stays open for the
+   next dictation.
+
+If permission is missing or recognition is unavailable, the panel's status line tells you where
+to enable it (System Settings → Privacy & Security → Speech Recognition).
+
+### Realtime transcription (OpenAI) — the fastest cloud mode
+
+1. Put the cursor where the text should go.
+2. Press **Cmd+Option+V** (or left-click the icon) and speak. The audio streams to OpenAI as you
+   talk.
+3. Press **Space** to stop and transcribe, or **Escape** to discard.
+4. The text is pasted at the cursor.
+5. You are now in **continue mode**: **Space** starts the next recording, **Escape** leaves
+   continue mode.
+
+Optional voice commands and trackpad gestures can control this recording; see
+[docs/voice-commands-and-gestures.md](docs/voice-commands-and-gestures.md).
+
+### Gemini audio transcription
+
+Menu → **Gemini Recording** starts recording; choose it again to stop and transcribe. **Escape**
+cancels. The text is pasted at the cursor. Its shortcut Cmd+Option+X is switched off; to switch
+it on, uncomment the `geminiAudioRecording` line in `Sources/main.swift` and rebuild.
+
+### Read selected text aloud
+
+Select text in any app and press **Cmd+Option+S**. The text is split into sentences and streamed
+to Gemini Live, and the speech plays as it arrives, slightly faster than normal (1.15×). Press
+**Cmd+Option+S** again to stop. The output device can be chosen in the Audio Devices tab.
+
+### Screen recording with transcription
+
+For dictating code, names and technical terms: Gemini sees the screen as well as hearing you,
+so it can spell what is shown.
+
+1. Press **Cmd+Option+C**. The menu bar shows **🎥 REC**.
+2. Talk about what is on screen.
+3. Press **Cmd+Option+C** again. The video (main screen with cursor, plus the default
+   microphone, recorded with ffmpeg) is sent to Gemini, and the transcript is pasted at the
+   cursor.
+4. The video is saved on your Desktop as `screen-recording-<date>.mp4` and deleted after a
+   successful transcription. If transcription fails, it stays there.
+
+Only one recording runs at a time: screen recording, OpenAI and Gemini recordings and the Apple
+Speech panel block one another, with a notification saying what is running.
+
+### History, statistics, audio devices, settings
+
+One window with four tabs, opened from the menu or with **Cmd+Option+A** (History):
+
+- **Settings**: which API keys are configured, the shortcuts, switches for voice commands and
+  trackpad gestures.
+- **History**: past transcriptions, kept in `~/Documents/SuperVoiceAssistant/transcription_history.json`.
+- **Statistics**: counts of your transcriptions, in `~/Documents/SuperVoiceAssistant/transcription_stats.json`.
+- **Audio Devices**: choose the microphone and the playback device, or follow the system default.
+
+### Text replacements
+
+Fix words speech recognition keeps getting wrong. Create `config.json`:
 
 ```json
 {
   "textReplacements": {
     "Cloud Code": "Claude Code",
-    "cloud code": "claude code",
     "cloud.md": "CLAUDE.md"
   }
 }
 ```
 
-This is useful for correcting common speech-to-text misrecognitions, especially for proper nouns, brand names, or technical terms. Replacements are case-sensitive and applied to all transcriptions.
+Replacements are case-sensitive and apply to OpenAI, Gemini and screen-recording transcripts
+(not to Apple Speech). The file is read from the **current working directory** at start: it works
+when you run the app from the project folder (`swift run` or the `ccc` alias below), not when the
+app is started from Finder or at login.
 
-## Usage
+## Keyboard shortcuts
 
-### Voice-to-Text Transcription
+| Shortcut | Action | Needs |
+|---|---|---|
+| Fn+Ctrl+Option | Conversation mode: on / send turn now / off | nothing |
+| Cmd+Option+V | OpenAI realtime recording | OpenAI key |
+| Space / Escape | During OpenAI recording: stop and transcribe / discard | |
+| Space / Escape | In continue mode: next recording / leave continue mode | |
+| Cmd+Option+S | Read selected text aloud / stop | Gemini key |
+| Cmd+Option+C | Screen recording start / stop and transcribe | Gemini key, ffmpeg |
+| Cmd+Option+A | History window | nothing |
+| ⌘M, ⌘Return | In the Apple Speech panel: start/stop, send | nothing |
 
-**Cloud (OpenAI Realtime - Primary):**
-1. Ensure OPENAI_API_KEY is set in your .env file
-2. Press **Command+Option+V** to start recording (menu bar icon shows recording indicator)
-3. Press **Space** to stop recording and transcribe, or **Escape** to cancel
-4. After transcription, press **Space** again to start a new recording (continue mode)
-5. Press **Escape** to exit continue mode
-6. The transcribed text automatically pastes at your cursor position
+All global shortcuts need the Accessibility permission.
 
-**Cloud (Gemini API):**
-1. Ensure GEMINI_API_KEY is set in your .env file
-2. Choose **Gemini Recording** from the menu bar menu to start recording (menu bar icon shows recording indicator)
-3. Choose it again to stop recording and transcribe
-   (the Command+Option+X shortcut is disabled by default; see `Sources/main.swift` to enable it)
-4. The transcribed text automatically pastes at your cursor position
-5. Press **Escape** during recording to cancel without transcribing
+## Privacy
 
-**When to use which:**
-- **OpenAI Realtime (Cmd+Option+V)**: Cloud-based, real-time streaming, best accuracy, space bar controls
-- **Gemini (Cmd+Option+X)**: Cloud-based, good accuracy for complex audio
+- Apple Speech features (conversation mode, panel) keep audio on the Mac when the language has an
+  on-device model; otherwise macOS uses Apple's server recognition.
+- OpenAI and Gemini features send the audio, the selected text or the screen video to that
+  provider, only when you start them.
+- Keys are read from `.env` files or the environment and are never written anywhere by the app.
 
-### Text-to-Speech
-1. Select any text in any application
-2. Press **Command+Option+S** to read the selected text aloud
-3. Press **Command+Option+S** again while reading to cancel the operation
-4. The app uses Gemini Live API for natural, streaming speech synthesis
-5. Configure audio devices via Settings for optimal playback
-
-### Screen Recording & Video Transcription
-1. Press **Command+Option+C** to start screen recording
-2. The menu bar shows "🎥 REC" while recording
-3. Press **Command+Option+C** again to stop recording
-4. The app automatically transcribes the video using Gemini 2.5 Flash
-5. Visual context improves accuracy for code, technical terms, and homophones
-6. Transcribed text pastes at your cursor position
-7. Video file is automatically deleted after successful transcription
-
-**Note:** Audio recording and screen recording are mutually exclusive - you cannot run both simultaneously.
-
-**When to use video vs audio:**
-- **Video**: Programming, code review, technical documentation, names, acronyms, specialized terminology
-- **Audio**: General speech, quick notes, casual transcription
-
-### Keyboard Shortcuts
-
-- **Fn+Ctrl+Option**: Hands-free conversation mode (Apple Speech, on-device); see below
-- **Command+Option+V**: Start OpenAI Realtime recording (cloud, primary)
-- **Command+Option+X**: Gemini audio recording (cloud) (disabled by default; start it from the menu bar item **Gemini Recording**)
-- **Command+Option+S**: Read selected text aloud / Cancel TTS playback
-- **Command+Option+C**: Start/stop screen recording and transcribe
-- **Command+Option+A**: Show transcription history window
-
-**During OpenAI Recording (Cmd+Option+V):**
-- **Space**: Stop recording and transcribe
-- **Escape**: Cancel recording (discard)
-
-**After OpenAI Transcription (Continue Mode):**
-- **Space**: Start new recording
-- **Escape**: Exit continue mode
-
-### Apple Speech (Native) — Voice to CLI
-
-A floating panel powered by Apple's built-in, on-device Speech Recognition
-(`SFSpeechRecognizer`). Spoken words stream live into an editable textarea so you
-can correct the transcript before sending it to the active app (Terminal, iTerm2,
-VS Code, etc.) at the cursor.
-
-**Usage:**
-1. Choose **Apple Speech Panel** from the menu bar menu to open the panel, then press
-   **Start** or **⌘M** to begin listening.
-2. Speak — words appear word-by-word in the textarea in real time.
-3. Optionally edit the text directly in the panel.
-4. Controls:
-   - **Start / Stop** button or **⌘M** — toggle the recognition session.
-   - **Copy** — put the transcript on the clipboard (paste manually with ⌘V); the
-     transcript area also has the native right-click Cut/Copy/Paste menu.
-   - **Clear** — erase the transcript without closing the panel.
-   - **⌘Enter** or **Send to CLI** — paste the transcript at the cursor in the
-     previously focused app. Plain Enter inserts a line break in the editor. The
-     panel **stays open** for repeated use, so you can keep dictating and sending
-     without reopening it.
-
-Recognition runs **on-device** whenever your locale's speech model supports it, so
-audio stays on your Mac and long dictation isn't cut off at the server session limit.
-
-**First-run permission:** macOS will prompt for Speech Recognition and Microphone
-access. If recognition is unavailable or permission is denied, the panel's status
-bar shows guidance directing you to **System Settings → Privacy & Security →
-Speech Recognition**.
-
-### Conversation Mode (Hands-Free)
-
-Hands-free, turn-by-turn dictation into whatever text field has the cursor (for example a
-chat with an LLM), using on-device Apple Speech.
-
-- Words are typed live into the focused field as they are recognized.
-- A turn is sent with Return after 7 seconds without new words; listening then continues
-  for the next turn.
-- **Fn+Ctrl+Option**: off → on; on with an unsent turn → send it now; on with nothing
-  typed → off.
-- If no usable microphone input is available (for example while the input device changes
-  during sleep/wake), conversation mode turns off and shows a notification instead of
-  crashing the app.
-
-## Available Commands
+## Running from source (developers)
 
 ```bash
-# Run the main app
+swift build
 swift run SuperVoiceAssistant
-
-# Or use the alias (if configured)
-ccc
-
-# Test streaming TTS functionality
-swift run TestStreamingTTS
-
-# Test audio collection for TTS
-swift run TestAudioCollector
-
-# Test sentence splitting for TTS
-swift run TestSentenceSplitter
-
-# Test screen recording (3-second capture)
-swift run RecordScreen
-
-# Test video transcription with Gemini API
-swift run TranscribeVideo <path-to-video-file>
-# Example: swift run TranscribeVideo ~/Desktop/recording.mp4
 ```
 
-## Project Structure
+When run from the terminal, macOS attributes the permissions to the terminal app, so grant
+Accessibility and Screen Recording to Terminal/iTerm2. Started this way the app still registers
+itself as a login item.
 
-- `Sources/` - Main app code
-  - `main.swift` - App entry point and delegate
-  - `ScreenRecorder.swift` - Screen recording with ffmpeg
-  - `OpenAIAudioRecordingManager.swift` - OpenAI recording manager
-  - `GeminiAudioRecordingManager.swift` - Gemini recording manager
-- `SharedSources/` - Shared components
-  - `EnvironmentLoader.swift` - .env file loading with swift-dotenv
-  - `OpenAIRealtimeTranscriber.swift` - OpenAI Realtime API transcription
-  - `GeminiAudioTranscriber.swift` - Gemini API audio transcription
-  - `GeminiStreamingPlayer.swift` - Streaming TTS playback engine
-  - `GeminiAudioCollector.swift` - Audio collection and WebSocket handling
-  - `SmartSentenceSplitter.swift` - Text processing for optimal speech
-  - `VideoTranscriber.swift` - Gemini API video transcription
-- `tests/` - Test utilities:
-  - `test-streaming-tts/` - TTS functionality test
-  - `test-audio-collector/` - Audio collection test
-  - `test-sentence-splitter/` - Sentence splitting test
-  - `test-openai-transcription/` - OpenAI transcription test
-- `tools/` - Utilities:
-  - `record-screen/` - Screen recording test tool
-  - `transcribe-video/` - Video transcription test tool
-- `scripts/` - Build and icon generation scripts
-- `logos/` - Logo and branding assets
+Quick alias to start the debug build from anywhere (it finds the project's `.env` by walking up
+from the executable):
+
+```bash
+echo 'alias ccc="$HOME/path/to/super-voice-assistant/.build/arm64-apple-macosx/debug/SuperVoiceAssistant"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Test tools:
+
+```bash
+swift run TestAppleSpeech            # Apple Speech dictation
+swift run TestOpenAITranscription    # OpenAI transcription
+swift run TestStreamingTTS           # Gemini text-to-speech
+swift run TestAudioCollector         # Gemini Live audio collection
+swift run TestSentenceSplitter       # sentence splitting for TTS
+swift run TestTextInserter           # pasting at the cursor
+swift run TestVoiceCommands          # voice command detection
+swift run RecordScreen               # 3-second screen capture
+swift run TranscribeVideo <file.mp4> # Gemini video transcription
+```
+
+## Project structure
+
+- `Sources/` — the app
+  - `main.swift` — app delegate, menu, shortcuts, pasting, screen-recording flow
+  - `ConversationMode.swift` — hands-free mode and the Fn+Ctrl+Option hotkey
+  - `AppleSpeechManager.swift` — the Apple Speech panel
+  - `OpenAIAudioRecordingManager.swift`, `GeminiAudioRecordingManager.swift` — cloud recordings
+  - `ScreenRecorder.swift` — ffmpeg screen capture
+  - `RecordingStateManager.swift` — one recording at a time
+  - `UnifiedManagerWindow.swift`, `SettingsWindow.swift`, `TranscriptionHistory*.swift`,
+    `TranscriptionStats.swift`, `StatsViewController.swift`, `AudioDevicesViewController.swift`
+  - `TextReplacements.swift`, `GestureEventHandler.swift`, `KeyboardEventHandler.swift`
+- `SharedSources/` — shared library (`SharedModels`)
+  - `AppleSpeechTranscriber.swift`, `OpenAIRealtimeTranscriber.swift`, `OpenAIAudioTranscriber.swift`,
+    `GeminiAudioTranscriber.swift`, `VideoTranscriber.swift`
+  - `GeminiAudioCollector.swift`, `GeminiStreamingPlayer.swift`, `SmartSentenceSplitter.swift`
+  - `TextInserter.swift`, `VoiceCommandDetector.swift`, `AudioDeviceManager.swift`,
+    `AudioSessionManager.swift`, `EnvironmentLoader.swift`
+- `tests/`, `tools/` — the test executables listed above
+- `scripts/` — `build_app_bundle.sh` and icon scripts
+- `docs/` — voice commands and gestures
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE).

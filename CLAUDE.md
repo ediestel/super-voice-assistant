@@ -21,8 +21,8 @@
 
 ### Voice Commands and Trackpad Gestures
 
-**Status**: ✅ Complete and integrated into main app
-**Documentation**: See `docs/voice-commands-and-gestures.md`
+**Status**: Voice commands work (with false triggers, see below); gestures are wired but rarely fire
+**Documentation**: See `docs/voice-commands-and-gestures.md` and `docs/implementation-summary-voice-gestures.md` (current state and known gaps)
 **Key Files**:
 - `SharedSources/VoiceCommandDetector.swift` - Real-time voice command detection
 - `Sources/GestureEventHandler.swift` - Trackpad gesture monitoring
@@ -32,8 +32,9 @@
 **Features**:
 - ✅ Voice command detection during recording ("stop recording", "cancel recording", etc.)
 - ✅ Optional command removal from final transcription
-- ✅ Three-finger swipe gestures for start/stop recording
-- ✅ Force touch gesture for toggle recording
+- ⚠️ Three-finger swipe gestures for start/stop recording (local monitor: only while an app window is key)
+- ⚠️ Force touch gesture for toggle recording (same limit)
+- ❌ Four-finger tap cancel: listed in Settings, not detected
 - ✅ Settings UI for enabling and configuring both features
 - ✅ Accessibility permission support for gestures
 - ✅ Cooldown mechanisms to prevent duplicate triggers
@@ -49,7 +50,8 @@
 - Force touch: Toggle recording
 
 **Implementation Notes**:
-- Voice commands work by monitoring real-time transcription deltas
+- Voice commands work by monitoring real-time transcription deltas (substring match: "stopped" triggers "stop")
+- `removeVoiceCommandsFromTranscription` reads false until toggled once (AppStorage default is not registered)
 - Gestures use NSEvent local monitoring (work when app is active)
 - Both integrate seamlessly with existing keyboard shortcuts
 - Settings stored in UserDefaults (voiceCommandsEnabled, gestureControlsEnabled)

@@ -1,289 +1,201 @@
-# Super Voice Assistant - Installation Guide
+# Super Voice Assistant — Installation Guide
 
-## ✅ App Bundle Created Successfully
+This guide takes you from a fresh clone to a working menu-bar app: build, install, permissions,
+optional API keys, first test of every feature, and what to do when something does not work.
 
-Your `SuperVoiceAssistant.app` bundle is ready at:
-```
-/Users/eckhartdiestel/Desktop/Coding_Projects/super-voice-assistant/build/SuperVoiceAssistant.app
-```
+API keys are **optional**. Without any key you get conversation mode and the Apple Speech panel
+(on-device dictation), history and settings. Each key adds features:
 
-**Bundle Size**: 4.5 MB
-**Architecture**: ARM64 (Apple Silicon)
-**Build Type**: Debug (for development and testing)
+| Key | Adds |
+|---|---|
+| none | Conversation mode (Fn+Ctrl+Option), Apple Speech panel, history, statistics, audio devices |
+| `OPENAI_API_KEY` | Realtime transcription (Cmd+Option+V, left-click on the icon), voice commands |
+| `GEMINI_API_KEY` | Read selected text aloud (Cmd+Option+S), screen recording transcription (Cmd+Option+C), Gemini audio recording |
 
----
+## 1. Before you start
 
-## 📦 Installation Steps
+- macOS 14 (Sonoma) or later.
+- Swift 5.9 or later: install Xcode 15+ from the App Store, or only the command line tools:
+  ```bash
+  xcode-select --install
+  swift --version     # should print 5.9 or later
+  ```
+- Only for screen recording: ffmpeg.
+  ```bash
+  brew install ffmpeg
+  which ffmpeg        # must print a path, e.g. /opt/homebrew/bin/ffmpeg
+  ```
+- Optional keys: an OpenAI API key (platform.openai.com) and/or a Gemini API key
+  (aistudio.google.com).
 
-### 1. Copy to Applications Folder
+## 2. Get the code
 
 ```bash
-cp -r "/Users/eckhartdiestel/Desktop/Coding_Projects/super-voice-assistant/build/SuperVoiceAssistant.app" /Applications/
+git clone https://github.com/ediestel/super-voice-assistant.git
+cd super-voice-assistant
 ```
 
-Or drag and drop the app from Finder to your Applications folder.
+## 3. Build the app bundle
 
-### 2. Configure API Keys
-
-The app needs your API keys to function. These were already copied to the bundle if you had a `.env` file.
-
-**Option A: Check if .env exists in the bundle**
 ```bash
-ls -la /Applications/SuperVoiceAssistant.app/Contents/Resources/.env
+./scripts/build_app_bundle.sh            # release, universal (arm64 + x86_64)
+# or: ./scripts/build_app_bundle.sh debug
 ```
 
-**Option B: Create/Edit .env file manually**
+The script builds the `SuperVoiceAssistant` product, creates `build/SuperVoiceAssistant.app`
+with its icon and Info.plist (menu-bar app, microphone and speech-recognition descriptions), and
+signs it. If a certificate named **SuperVoice Local Signing** is in your keychain it signs with
+that; otherwise it signs ad hoc.
+
+> Ad-hoc signing ties the Accessibility grant to this one build. After every rebuild macOS treats
+> the app as new, and you must remove and re-add it under Accessibility. A self-signed
+> certificate named "SuperVoice Local Signing" (Keychain Access → Certificate Assistant → Create a
+> Certificate, type Code Signing) avoids this.
+
+## 4. Install
+
 ```bash
-# Right-click app in Applications → Show Package Contents
-# Navigate to Contents/Resources/
-# Create .env file with:
-GEMINI_API_KEY=your_gemini_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
+cp -R build/SuperVoiceAssistant.app /Applications/
+open /Applications/SuperVoiceAssistant.app
 ```
 
-Or from terminal:
+What happens on first start:
+
+- A **microphone icon** appears in the menu bar. There is no Dock icon and no window.
+- The app registers itself to **start at login** (System Settings → General → Login Items lists
+  it; remove it there if you do not want that).
+- If Accessibility is not granted yet, an alert offers **Open Settings** (see step 5).
+
+The app is not restarted after Quit or a crash; start it again from Applications or Spotlight.
+
+## 5. Grant permissions
+
+Open **System Settings → Privacy & Security** and allow:
+
+| Permission | Needed for | How |
+|---|---|---|
+| **Accessibility** | all global shortcuts, pasting text at the cursor, Fn+Ctrl+Option | Accessibility → **+** → choose `/Applications/SuperVoiceAssistant.app` → switch on |
+| **Microphone** | every recording | macOS asks on the first recording; allow it |
+| **Speech Recognition** | conversation mode, Apple Speech panel | macOS asks on first use; allow it |
+| **Screen Recording** | Cmd+Option+C | Screen & System Audio Recording → add the app (or the terminal when run from source) |
+
+After changing Accessibility, **quit and start the app again**; the shortcuts are registered at
+start.
+
+Check it: right-click the icon → **Test Auto-Paste** with the cursor in a text field. A test text
+must appear. If not, Accessibility is not in effect yet.
+
+## 6. Optional: API keys
+
+The app reads keys from the environment or from a `.env` file. It looks for `.env` in this order
+and takes the first one it finds:
+
+1. the folder of the executable and up to five folders above it
+   (for the app in `/Applications` that is `…/Contents/MacOS`, `…/Contents`, the `.app`, and
+   `/Applications`; for a build inside the project it reaches the project folder),
+2. your home folder: **`~/.env`**,
+3. the current working directory.
+
+For the installed app, use **`~/.env`**:
+
 ```bash
-cat > /Applications/SuperVoiceAssistant.app/Contents/Resources/.env << 'EOF'
-GEMINI_API_KEY=your_gemini_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
+cat >> ~/.env <<'EOF'
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=AIza...
 EOF
+chmod 600 ~/.env
 ```
 
-### 3. Grant Required Permissions
+Write only the keys you have. Then quit and start the app again. **Settings** (right-click →
+Settings…) shows each key as *Configured* or *Not configured*.
 
-The app needs these permissions to function:
+> The build script copies a project `.env` into `Contents/Resources/` and its closing message
+> suggests creating one there. The app does **not** look in `Contents/Resources`; use `~/.env`.
 
-**Microphone Access** (Required)
-- System Settings → Privacy & Security → Microphone
-- Enable for Super Voice Assistant
+## 7. First test of each feature
 
-**Accessibility Access** (Required for auto-paste and gestures)
-- System Settings → Privacy & Security → Accessibility
-- Click the lock to make changes
-- Click + button
-- Navigate to Applications and add Super Voice Assistant
-- Enable the checkbox
+1. **Conversation mode (no key):** click into any text field (Notes, a chat), press
+   **Fn+Ctrl+Option**, say a sentence. The words appear as you speak; after 7 seconds of silence
+   Return is pressed. Press **Fn+Ctrl+Option** again on an empty turn to turn it off.
+2. **Apple Speech panel (no key):** right-click → **Apple Speech Panel** → **Start** (or ⌘M),
+   speak, correct, **⌘Return** to paste into the app you came from.
+3. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **Space**. The text is
+   pasted. **Escape** leaves continue mode.
+4. **Read aloud (Gemini key):** select a paragraph, **Cmd+Option+S**. Press again to stop.
+5. **Screen recording (Gemini key + ffmpeg):** **Cmd+Option+C**, talk about what is on screen,
+   **Cmd+Option+C** again. The transcript is pasted at the cursor.
+6. **History:** **Cmd+Option+A**.
 
-### 4. Launch the App
+## 8. Optional settings
 
-**From Applications:**
-```bash
-open /Applications/SuperVoiceAssistant.app
-```
+- **Audio Devices** tab: choose microphone and playback device.
+- **Settings** tab: voice commands and trackpad gestures (see
+  [docs/voice-commands-and-gestures.md](docs/voice-commands-and-gestures.md)).
+- **Text replacements:** `config.json` in the folder the app is started from; works when run
+  from the project folder (see README).
+- **Gemini shortcut Cmd+Option+X:** off by default; uncomment the `geminiAudioRecording` line in
+  `Sources/main.swift` and rebuild.
 
-**Or double-click** SuperVoiceAssistant.app in Finder.
-
-**First Launch Note**: macOS may show a security warning for apps not from the App Store.
-- Right-click the app → Open
-- Click "Open" in the dialog
-- This only needs to be done once
-
----
-
-## 🎯 Quick Start
-
-Once launched, the app runs in the menu bar (top-right corner).
-
-### Basic Usage
-
-**Start OpenAI Recording:**
-```
-Press: Cmd+Opt+V
-Speak your text
-Press: Space (double-tap) to stop
-→ Text auto-pastes at cursor
-```
-
-**Start Gemini Recording:**
-```
-Menu bar → Gemini Recording   (Cmd+Opt+X is disabled by default)
-Speak your text
-Automatic stop when you finish speaking
-→ Text auto-pastes at cursor
-```
-
-**Read Selected Text Aloud (Gemini TTS):**
-```
-Select any text
-Press: Cmd+Opt+S
-→ Text is read aloud with natural voice
-```
-
-**View Transcription History:**
-```
-Press: Cmd+Opt+A
-→ Shows all your recent transcriptions
-```
-
-### New Features (Just Added!)
-
-**Voice Commands** (Enable in Settings):
-- Say "stop recording" to stop
-- Say "cancel recording" to discard
-- Say "continue recording" to restart
-
-**Trackpad Gestures** (Enable in Settings):
-- Three-finger swipe down: Start recording
-- Three-finger swipe up: Stop recording
-- Force touch: Toggle recording
-
----
-
-## ⚙️ Settings
-
-Access settings from the menu bar icon → Settings
-
-**Configure:**
-- API key status (read from .env)
-- Keyboard shortcuts reference
-- Voice commands (enable/disable)
-- Command removal from transcription
-- Trackpad gestures (enable/disable)
-
----
-
-## 🔧 Troubleshooting
-
-### App Won't Launch
-
-**Check logs:**
-```bash
-open /Applications/SuperVoiceAssistant.app
-# Then check Console.app for crash logs
-```
-
-**Verify executable:**
-```bash
-file /Applications/SuperVoiceAssistant.app/Contents/MacOS/SuperVoiceAssistant
-# Should show: Mach-O 64-bit executable arm64
-```
-
-### "App is Damaged" Error
+## 9. Running from source instead
 
 ```bash
-# Remove quarantine attribute
+swift build
+swift run SuperVoiceAssistant
+```
+
+Grant Accessibility, Microphone, Speech Recognition and Screen Recording to your **terminal app**
+(Terminal, iTerm2), since macOS attributes them to it. Put keys in the project's `.env` or
+`~/.env`. `config.json` in the project folder is picked up because that is the working directory.
+
+## 10. Troubleshooting
+
+**Shortcuts do nothing / text is not pasted**
+- Accessibility must be on for exactly this app. After a rebuild with ad-hoc signing: select the
+  entry in Accessibility, remove it with **−**, add the app again, restart the app.
+- Use **Test Auto-Paste** to check.
+
+**Fn+Ctrl+Option does nothing**
+- Needs Accessibility (it watches modifier keys globally). Press the three keys together and
+  release them without another key.
+- Speech Recognition must be allowed; otherwise a notification says so.
+
+**"OPENAI_API_KEY not found" / "GEMINI_API_KEY not found"**
+- The key is not in `~/.env` or is misspelled. Settings shows the status. Restart after editing.
+
+**Read aloud does nothing**
+- Needs `GEMINI_API_KEY` at start; the speech components are only set up when the key is found
+  at launch. Add the key, restart.
+
+**Screen recording fails**
+- `which ffmpeg` must print a path. Screen Recording permission must be on. The recording is
+  kept on the Desktop (`screen-recording-<date>.mp4`) when transcription fails.
+
+**"Cannot start … another recording is active"**
+- Only one recording at a time. Stop the running one (the menu-bar status shows which).
+
+**Conversation mode turned itself off**
+- The microphone input disappeared (device change, sleep/wake). Start it again.
+
+**"App is damaged" or it will not open**
+```bash
 xattr -cr /Applications/SuperVoiceAssistant.app
-
-# Re-sign the app
 codesign --force --deep --sign - /Applications/SuperVoiceAssistant.app
 ```
 
-### API Keys Not Working
-
-**Verify .env file:**
+**See what the app logs**
 ```bash
-cat /Applications/SuperVoiceAssistant.app/Contents/Resources/.env
+/Applications/SuperVoiceAssistant.app/Contents/MacOS/SuperVoiceAssistant
 ```
+Started like this, its log lines (keys found, shortcuts registered, permission state) print to
+the terminal.
 
-**Check format:**
-- No spaces around `=`
-- No quotes around keys (unless part of the key)
-- One key per line
-
-### Permissions Not Working
-
-**Reset permissions:**
-```bash
-tccutil reset Microphone
-tccutil reset Accessibility
-```
-
-Then re-grant permissions in System Settings.
-
-### Recording Not Working
-
-1. **Check microphone permission** (System Settings → Privacy → Microphone)
-2. **Check selected audio input** (Settings → Audio Input Device)
-3. **Verify API keys** are present in .env file
-4. **Check Console.app** for error messages
-
----
-
-## 🚀 Building Release Version
-
-For production use, build a release version:
+## 11. Uninstall
 
 ```bash
-cd /Users/eckhartdiestel/Desktop/Coding_Projects/super-voice-assistant
-./scripts/build_app_bundle.sh release
+osascript -e 'quit app "SuperVoiceAssistant"'
+rm -rf /Applications/SuperVoiceAssistant.app
+rm -rf ~/Documents/SuperVoiceAssistant     # history and statistics
 ```
 
-This creates an optimized build but requires fixing the test-text-inserter compilation issue first.
-
-**Alternative (single architecture):**
-```bash
-swift build -c release
-./scripts/build_app_bundle.sh release
-```
-
----
-
-## 📁 App Bundle Structure
-
-```
-SuperVoiceAssistant.app/
-├── Contents/
-│   ├── Info.plist              # App metadata
-│   ├── MacOS/
-│   │   └── SuperVoiceAssistant # Executable (2.6 MB)
-│   ├── Resources/
-│   │   ├── AppIcon.icns        # App icon (1.9 MB)
-│   │   └── .env                # API keys (you create this)
-│   └── _CodeSignature/         # Ad-hoc signature
-```
-
----
-
-## 🔐 Security Notes
-
-- **Ad-hoc Signed**: The app is signed with an ad-hoc signature (local use only)
-- **Not Notarized**: Cannot be distributed publicly without Apple Developer account
-- **Privacy**: All voice processing happens via API calls to OpenAI/Gemini
-- **Local Data**: Transcription history stored locally only
-
----
-
-## 📊 Features Summary
-
-### Keyboard Shortcuts
-- **Cmd+Opt+V**: OpenAI Realtime recording
-- **Cmd+Opt+X**: Gemini audio recording (disabled by default; start it from the menu bar item **Gemini Recording**)
-- **Cmd+Opt+S**: Read selected text aloud (Gemini TTS)
-- **Cmd+Opt+C**: Screen recording with video transcription
-- **Cmd+Opt+A**: Show transcription history
-- **Space** (during recording): Stop recording
-- **Escape** (during recording): Cancel recording
-
-### Voice Commands (Optional)
-- "stop recording" - Stop and transcribe
-- "cancel recording" - Discard recording
-- "continue recording" - Start new recording
-
-### Trackpad Gestures (Optional)
-- Three-finger swipe down: Start recording
-- Three-finger swipe up: Stop recording
-- Force touch: Toggle recording
-
----
-
-## 🆘 Support
-
-**Documentation:**
-- `README.md` - Project overview
-- `docs/voice-commands-and-gestures.md` - Voice/gesture features
-- `CLAUDE.md` - Development notes
-
-**Console Logs:**
-```bash
-# Watch app logs in real-time
-log stream --predicate 'subsystem == "com.supervoice.SuperVoiceAssistant"' --level debug
-```
-
-**GitHub Issues:**
-- Report bugs or request features at the project repository
-
----
-
-## ✅ You're All Set!
-
-Your Super Voice Assistant is ready to use. Enjoy hands-free transcription! 🎤
+Remove it from System Settings → General → Login Items and from the Privacy & Security lists, and
+delete the keys from `~/.env` if you no longer need them.

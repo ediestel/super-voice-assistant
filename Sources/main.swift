@@ -157,6 +157,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         conversationItem.target = self
         menu.addItem(conversationItem)
 
+        let dictationItem = NSMenuItem(title: "Dictation Mode (fn⌃⌥⌘)", action: #selector(handleMenuDictationMode), keyEquivalent: "")
+        dictationItem.target = self
+        menu.addItem(dictationItem)
+
         let appleSpeechItem = NSMenuItem(title: "Apple Speech Panel", action: #selector(handleMenuAppleSpeech), keyEquivalent: "")
         appleSpeechItem.target = self
         menu.addItem(appleSpeechItem)
@@ -280,14 +284,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             self?.toggleScreenRecording()
         }
 
-        // Fn+⌃⌥: hands-free conversation mode (live typing, auto-send after silence)
+        // Fn+⌃⌥: hands-free conversation mode (live typing, auto-send after silence).
+        // Fn+⌃⌥⌘: dictation mode (live typing, never presses Return).
         ConversationMode.shared.onActiveChange = { [weak self] active in
             guard let self, let button = self.statusItem.button else { return }
-            button.image = NSImage(systemSymbolName: active ? "waveform.circle.fill" : "mic.fill",
-                                   accessibilityDescription: "Voice Assistant")
+            let symbol: String
+            if !active {
+                symbol = "mic.fill"
+            } else if ConversationMode.shared.mode == .dictation {
+                symbol = "character.cursor.ibeam"
+            } else {
+                symbol = "waveform.circle.fill"
+            }
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Voice Assistant")
         }
-        conversationHotkey = FnControlOptionHotkey { [weak self] in
-            self?.toggleConversationMode()
+        conversationHotkey = FnControlOptionHotkey { [weak self] withCommand in
+            self?.toggleConversationMode(withCommand ? .dictation : .conversation)
         }
 
         // Set up Gemini audio manager
@@ -486,22 +498,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     }
 
     @objc func handleMenuConversationMode() {
-        toggleConversationMode()
+        toggleConversationMode(.conversation)
     }
 
-    /// Fn+⌃⌥ / menu: turn conversation mode on or off.
-    private func toggleConversationMode() {
+    @objc func handleMenuDictationMode() {
+        toggleConversationMode(.dictation)
+    }
+
+    /// Fn+⌃⌥ / Fn+⌃⌥⌘ / menu: turn the running mode off, or start `mode`.
+    private func toggleConversationMode(_ mode: ConversationMode.Mode) {
         let conversation = ConversationMode.shared
         // Mutual exclusion: don't grab the mic while another recorder is active.
         if !conversation.isActive && (screenRecorder.recording || openaiAudioManager.isRecording || geminiAudioManager.isRecording) {
             let notification = NSUserNotification()
-            notification.title = "Cannot Start Conversation Mode"
+            notification.title = "Cannot Start \(mode.name) Mode"
             notification.informativeText = "Another recording is currently active. Stop it first."
             NSUserNotificationCenter.default.deliver(notification)
-            print("⚠️ Blocked conversation mode - another recording is active")
+            print("⚠️ Blocked \(mode.name.lowercased()) mode - another recording is active")
             return
         }
-        conversation.handleHotkey()
+        conversation.handleHotkey(mode)
     }
     
 

@@ -3,12 +3,12 @@
 This guide takes you from a fresh clone to a working menu-bar app: build, install, permissions,
 optional API keys, first test of every feature, and what to do when something does not work.
 
-API keys are **optional**. Without any key you get conversation mode and the Apple Speech panel
-(on-device dictation), history and settings. Each key adds features:
+API keys are **optional**. Without any key you get conversation mode, dictation mode and the
+Apple Speech panel (on-device dictation), history and settings. Each key adds features:
 
 | Key | Adds |
 |---|---|
-| none | Conversation mode (Fn+Ctrl+Option) and Apple Speech panel, both real-time (words appear as you speak), history, statistics, audio devices |
+| none | Conversation mode (Fn+Ctrl+Option), dictation mode (Fn+Ctrl+Option+Cmd) and Apple Speech panel, all real-time (words appear as you speak), history, statistics, audio devices |
 | `OPENAI_API_KEY` | OpenAI transcription (Cmd+Option+V, left-click on the icon), voice commands |
 | `GEMINI_API_KEY` | Read selected text aloud (Cmd+Option+S), screen recording transcription (Cmd+Option+C), Gemini audio recording |
 
@@ -74,9 +74,9 @@ Open **System Settings → Privacy & Security** and allow:
 
 | Permission | Needed for | How |
 |---|---|---|
-| **Accessibility** | all global shortcuts, pasting text at the cursor, Fn+Ctrl+Option | Accessibility → **+** → choose `/Applications/SuperVoiceAssistant.app` → switch on |
+| **Accessibility** | all global shortcuts, pasting text at the cursor, Fn+Ctrl+Option(+Cmd) | Accessibility → **+** → choose `/Applications/SuperVoiceAssistant.app` → switch on |
 | **Microphone** | every recording | macOS asks on the first recording; allow it |
-| **Speech Recognition** | conversation mode, Apple Speech panel | macOS asks on first use; allow it |
+| **Speech Recognition** | conversation mode, dictation mode, Apple Speech panel | macOS asks on first use; allow it |
 | **Screen Recording** | Cmd+Option+C | Screen & System Audio Recording → add the app (or the terminal when run from source) |
 
 After changing Accessibility, **quit and start the app again**; the shortcuts are registered at
@@ -117,11 +117,13 @@ Settings…) shows each key as *Configured* or *Not configured*.
 1. **Conversation mode (no key):** click into any text field (Notes, a chat), press
    **Fn+Ctrl+Option**, say a sentence. The words appear as you speak; after 7 seconds of silence
    Return is pressed. Press **Fn+Ctrl+Option** again to turn it off.
-2. **Apple Speech panel (no key):** right-click → **Apple Speech Panel** → **Start** (or ⌘M),
+2. **Dictation mode (no key):** same, but press **Fn+Ctrl+Option+Cmd**. Pause as long as you
+   like; Return is never pressed. Either chord turns it off.
+3. **Apple Speech panel (no key):** right-click → **Apple Speech Panel** → **Start** (or ⌘M),
    speak, correct, **⌘Return** to paste into the app you came from.
-3. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **double-tap Space**. The text is
+4. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **double-tap Space**. The text is
    pasted. **Escape** leaves continue mode.
-4. **Read aloud (Gemini key):** select a paragraph, **Cmd+Option+S**. Press again to stop.
+5. **Read aloud (Gemini key):** select a paragraph, **Cmd+Option+S**. Press again to stop.
 5. **Screen recording (Gemini key + ffmpeg):** **Cmd+Option+C**, talk about what is on screen,
    **Cmd+Option+C** again. The transcript is pasted at the cursor.
 6. **History:** **Cmd+Option+A**.
@@ -154,9 +156,9 @@ Grant Accessibility, Microphone, Speech Recognition and Screen Recording to your
   entry in Accessibility, remove it with **−**, add the app again, restart the app.
 - Use **Test Auto-Paste** to check.
 
-**Fn+Ctrl+Option does nothing**
-- Needs Accessibility (it watches modifier keys globally). Press the three keys together and
-  release them without another key.
+**Fn+Ctrl+Option (or Fn+Ctrl+Option+Cmd) does nothing**
+- Needs Accessibility (it watches modifier keys globally). Press the keys together and
+  release them without another key. Shift cancels the chord.
 - Speech Recognition must be allowed; otherwise a notification says so.
 
 **"OPENAI_API_KEY not found" / "GEMINI_API_KEY not found"**
@@ -173,7 +175,7 @@ Grant Accessibility, Microphone, Speech Recognition and Screen Recording to your
 **"Cannot start … another recording is active"**
 - Only one recording at a time. Stop the running one (the menu-bar status shows which).
 
-**Conversation mode turned itself off**
+**Conversation or dictation mode turned itself off**
 - The microphone input disappeared (device change, sleep/wake). Start it again.
 
 **"App is damaged" or it will not open**

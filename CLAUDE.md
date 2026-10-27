@@ -93,7 +93,8 @@
 - **Cmd+Opt+S**: Text-to-speech with Gemini
 - **Cmd+Opt+C**: Screen recording with video transcription
 - **Cmd+Opt+A**: Show transcription history
-- **Fn+Ctrl+Option**: Hands-free conversation mode (Apple Speech, on-device)
+- **Fn+Ctrl+Option**: Hands-free conversation mode (Apple Speech, on-device; Return after 7 s of silence)
+- **Fn+Ctrl+Option+Cmd**: Hands-free dictation mode (same engine, never presses Return)
 - **Menu bar → Apple Speech Panel**: Apple Speech (Native) floating panel — voice to CLI (no shortcut)
 - **Cmd+Opt+V**: OpenAI Realtime audio recording (cloud, primary)
 
@@ -145,11 +146,12 @@
 - `Sources/Info.plist` - `NSSpeechRecognitionUsageDescription` + `NSMicrophoneUsageDescription` (embedded via `-sectcreate` linker flag)
 - `Sources/main.swift` - `handleMenuAppleSpeech` ("Apple Speech Panel" menu item); the former Ctrl+Space shortcut was removed
 - `Sources/SettingsWindow.swift` - "Apple Speech (Native)" GroupBox + menu bar row
-- `Sources/ConversationMode.swift` - hands-free conversation mode + `FnControlOptionHotkey` (Fn+Ctrl+Option)
+- `Sources/ConversationMode.swift` - hands-free conversation and dictation modes + `FnControlOptionHotkey` (Fn+Ctrl+Option, Fn+Ctrl+Option+Cmd)
 
 **Features**:
 - ✅ "Apple Speech Panel" menu item opens a floating panel; Start / ⌘M begins on-device dictation
 - ✅ Fn+Ctrl+Option conversation mode types words live into the focused field and sends each turn with Return after 7 s of silence
+- ✅ Fn+Ctrl+Option+Cmd dictation mode types words live but never presses Return; a pause only starts a fresh recognition segment
 - ✅ Real-time word-by-word streaming into an editable `TextEditor`
 - ✅ Start/Stop (or ⌘M) toggle, Clear, and Send to CLI (Enter) controls
 - ✅ Pastes the (optionally edited) transcript at the cursor via `AppDelegate.pasteTextAtCursor()`

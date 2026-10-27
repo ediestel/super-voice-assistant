@@ -4,19 +4,32 @@ import SharedModels
 
 // MARK: - Conversation Mode
 
-/// Hands-free turn-by-turn dictation into whatever text field has the cursor
-/// (e.g. a chat with an LLM). Words are typed live as they are recognized; the turn
-/// is sent with Return after `silenceBeforeSend` seconds without new words. Listening
-/// then continues for the next turn.
+/// Hands-free dictation into whatever text field has the cursor. Words are typed live as
+/// they are recognized. After `silenceBeforeSend` seconds without new words the recognition
+/// session is restarted so the next words form a fresh segment; in `.conversation` mode
+/// (e.g. a chat with an LLM) that pause also sends the turn with Return. In `.dictation`
+/// mode Return is never pressed: the text keeps growing until you send it yourself.
 ///
-/// Fn+⌃⌥: off → on; on → off. Turning off never presses Return; unsent text stays in the field.
+/// Fn+⌃⌥: conversation mode on; Fn+⌃⌥⌘: dictation mode on. Either chord turns a running
+/// mode off. Turning off never presses Return; unsent text stays in the field.
 final class ConversationMode {
+
+    enum Mode {
+        /// Live typing, Return after a pause.
+        case conversation
+        /// Live typing only.
+        case dictation
+
+        var name: String { self == .conversation ? "Conversation" : "Dictation" }
+    }
 
     static let shared = ConversationMode()
 
     private let silenceBeforeSend: TimeInterval = 7
 
     private(set) var isActive = false
+    /// The mode that is running, or was last started.
+    private(set) var mode: Mode = .conversation
     /// Called on the main thread when the mode turns on or off.
     var onActiveChange: ((Bool) -> Void)?
 
@@ -37,19 +50,21 @@ final class ConversationMode {
 
     // MARK: Hotkey
 
-    func handleHotkey() {
-        print("🗣 Conversation hotkey (active=\(isActive), turnHasText=\(turnHasText))")
+    /// Turns the running mode off, or starts `requested` when nothing runs.
+    func handleHotkey(_ requested: Mode) {
+        print("🗣 \(requested.name) hotkey (active=\(isActive), mode=\(mode.name), turnHasText=\(turnHasText))")
         if isActive {
             stop()
         } else {
-            start()
+            start(requested)
         }
     }
 
     // MARK: Control
 
-    func start() {
+    func start(_ mode: Mode) {
         guard !isActive else { return }
+        self.mode = mode
         // The floating panel uses its own recognizer on the same microphone.
         if AppleSpeechManager.shared.isListening { AppleSpeechManager.shared.stopListening() }
         transcriber.requestPermission { [weak self] authorized in
@@ -78,7 +93,7 @@ final class ConversationMode {
     }
 
     private func listen() {
-        print("🗣 Conversation: start session")
+        print("🗣 \(mode.name): start session")
         typed = ""
         do {
             try transcriber.startListening()
@@ -88,15 +103,20 @@ final class ConversationMode {
         }
     }
 
-    /// Presses Return in the target field and starts a fresh recognition session,
-    /// so the next turn's text does not contain this one's.
+    /// Called after a pause. Starts a fresh recognition session, so later words don't retype
+    /// this segment's; in conversation mode it first presses Return in the target field.
+    /// In dictation mode the text stays, and `didStop` puts a space before the next words.
     private func sendTurn() {
         silenceTimer?.invalidate()
         silenceTimer = nil
         guard turnHasText else { return }
-        print("🗣 Conversation: send turn")
-        Keyboard.press(CGKeyCode(kVK_Return))
-        resetTurn()
+        if mode == .conversation {
+            print("🗣 Conversation: send turn")
+            Keyboard.press(CGKeyCode(kVK_Return))
+            resetTurn()
+        } else {
+            print("🗣 Dictation: pause, new segment")
+        }
         // Stopping ends the session; the stop callback starts the next one.
         transcriber.stopListening()
     }
@@ -126,7 +146,7 @@ final class ConversationMode {
 
         // Retype only what changed: the recognizer revises recent words as it goes.
         let common = zip(typed, target).prefix { $0 == $1 }.count
-        print("🗣 Conversation: update \"\(target)\" (delete \(typed.count - common), type \(target.count - common))")
+        print("🗣 \(mode.name): update \"\(target)\" (delete \(typed.count - common), type \(target.count - common))")
         Keyboard.backspace(typed.count - common)
         Keyboard.type(String(target.dropFirst(common)))
         typed = target
@@ -139,7 +159,7 @@ final class ConversationMode {
     }
 
     fileprivate func didStop() {
-        print("🗣 Conversation: session ended (active=\(isActive))")
+        print("🗣 \(mode.name): session ended (active=\(isActive))")
         guard isActive else { return }
         // The recognizer also ends on its own (long silence, "no speech" error). Keep the
         // turn's text and continue listening; the next session's words get a leading space.
@@ -152,10 +172,10 @@ final class ConversationMode {
 
     private func notify(_ message: String) {
         let notification = NSUserNotification()
-        notification.title = "Conversation Mode"
+        notification.title = "\(mode.name) Mode"
         notification.informativeText = message
         NSUserNotificationCenter.default.deliver(notification)
-        print("⚠️ Conversation mode: \(message)")
+        print("⚠️ \(mode.name) mode: \(message)")
     }
 }
 
@@ -217,19 +237,24 @@ private enum Keyboard {
     }
 }
 
-// MARK: - Fn+⌃⌥ hotkey
+// MARK: - Fn+⌃⌥ / Fn+⌃⌥⌘ hotkey
 
-/// Detects a press of Fn+Control+Option with no other key: fires when the three are
-/// released together. The shortcut library can't express modifier-only combos or Fn.
+/// Detects a press of Fn+Control+Option, or Fn+Control+Option+Command, with no other key:
+/// fires when the keys are released, with `withCommand` true for the four-key chord. Adding
+/// Command while the three are held upgrades the chord; releasing it first does not downgrade.
+/// Shift or any ordinary key cancels. The shortcut library can't express modifier-only
+/// combos or Fn.
 final class FnControlOptionHotkey {
-    private let chord: NSEvent.ModifierFlags = [.function, .control, .option]
+    private let base: NSEvent.ModifierFlags = [.function, .control, .option]
+    private let extended: NSEvent.ModifierFlags = [.function, .control, .option, .command]
     private let watched: NSEvent.ModifierFlags = [.function, .control, .option, .command, .shift]
-    private var armed = false
+    /// The largest chord seen since all keys were last up; nil when none.
+    private var armed: NSEvent.ModifierFlags?
     private var spoiled = false
     private var monitors: [Any] = []
-    private let action: () -> Void
+    private let action: (_ withCommand: Bool) -> Void
 
-    init(action: @escaping () -> Void) {
+    init(action: @escaping (_ withCommand: Bool) -> Void) {
         self.action = action
         // Global monitors see other apps' events (needs Accessibility); local ones see ours.
         if let m = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown], handler: { [weak self] in self?.handle($0) }) {
@@ -244,17 +269,18 @@ final class FnControlOptionHotkey {
 
     private func handle(_ event: NSEvent) {
         if event.type == .keyDown {
-            // Fn+⌃⌥+<key> is someone else's shortcut.
-            if armed { spoiled = true }
+            // Fn+⌃⌥(+⌘)+<key> is someone else's shortcut.
+            if armed != nil { spoiled = true }
             return
         }
         let flags = event.modifierFlags.intersection(watched)
-        if flags == chord {
-            if !armed { armed = true; spoiled = false }
+        if flags == base || flags == extended {
+            if armed == nil { spoiled = false }
+            if armed != extended { armed = flags }
         } else if flags.isEmpty {
-            if armed && !spoiled { action() }
-            armed = false
-        } else if armed && !flags.isSubset(of: chord) {
+            if let chord = armed, !spoiled { action(chord == extended) }
+            armed = nil
+        } else if armed != nil && !flags.isSubset(of: extended) {
             spoiled = true
         }
     }

@@ -21,7 +21,8 @@ https://github.com/user-attachments/assets/0b7f481f-4fec-4811-87ef-13737e0efac4
 
 | Feature | How to start it | Needs | Where the audio goes |
 |---|---|---|---|
-| Conversation mode (hands-free, live dictation) | **Fn+Ctrl+Option** or menu | nothing | stays on your Mac (on-device Apple Speech where your language supports it) |
+| Conversation mode (hands-free, live dictation, sends after a pause) | **Fn+Ctrl+Option** or menu | nothing | stays on your Mac (on-device Apple Speech where your language supports it) |
+| Dictation mode (hands-free, live dictation, never sends) | **Fn+Ctrl+Option+Cmd** or menu | nothing | stays on your Mac (as above) |
 | Apple Speech panel (live dictation, edit, send) | menu → **Apple Speech Panel** | nothing | stays on your Mac (as above) |
 | History, Statistics, Audio Devices, Settings | **Cmd+Option+A** or menu | nothing | local |
 | OpenAI transcription (cloud) | **Cmd+Option+V**, or left-click the menu-bar icon | `OPENAI_API_KEY` | OpenAI, model `gpt-4o-transcribe` |
@@ -72,8 +73,8 @@ Restart the app after adding or changing a key; keys are read at start.
 ## Using it
 
 The app lives in the menu bar as a **microphone** icon (no Dock icon). While conversation mode
-is on, the icon turns into a filled waveform circle; while recording, a blinking status shows
-next to it.
+is on, the icon turns into a filled waveform circle; in dictation mode it is a text cursor
+(I-beam); while recording, a blinking status shows next to it.
 
 - **Right-click** the icon for the menu.
 - **Left-click** the icon starts or stops the main cloud recording (OpenAI): it stops a running
@@ -88,7 +89,8 @@ next to it.
 | Gemini Recording | Start / stop a Gemini audio recording |
 | Screen Recording (⌘⌥C) | Start / stop a screen recording that is then transcribed |
 | Read Selected Text (⌘⌥S) | Read the selected text aloud / stop reading |
-| Conversation Mode (fn⌃⌥) | Hands-free dictation on / off |
+| Conversation Mode (fn⌃⌥) | Hands-free dictation that sends after a pause: on / off |
+| Dictation Mode (fn⌃⌥⌘) | Hands-free dictation that never presses Return: on / off |
 | Apple Speech Panel | Floating dictation panel |
 | History (⌘⌥A) | Past transcriptions |
 | Settings… / Statistics… | The manager window with its tabs |
@@ -109,6 +111,22 @@ For talking to a chat window (an LLM, a messenger) without touching the keyboard
 Recognition uses Apple Speech in your system language and runs on-device whenever that language
 supports it. If the microphone becomes unavailable (for example while the input device changes
 during sleep/wake), the mode turns itself off and shows a notification.
+
+### Dictation mode — the same, but Return is never pressed
+
+For continuous speech-to-text into a document, an editor or a long message that you send
+yourself.
+
+1. Click into the text field.
+2. Press **Fn+Ctrl+Option+Cmd** (all four modifier keys, no other key; the same "Tink" sound).
+   Speak; words are typed live into the field.
+3. Pauses do not send anything. After **7 seconds** without new words the recognizer starts a
+   fresh segment, and the next words continue after a space. Press Return yourself when you
+   want to send or start a new line.
+4. Press **Fn+Ctrl+Option** or **Fn+Ctrl+Option+Cmd** to turn the mode off ("Pop" sound). The
+   text stays in the field.
+
+Only one of the two modes runs at a time; either chord turns the running one off.
 
 ### Apple Speech panel — dictate, correct, then send
 
@@ -199,6 +217,7 @@ app is started from Finder or at login.
 | Shortcut | Action | Needs |
 |---|---|---|
 | Fn+Ctrl+Option (the three keys together) | Conversation mode, hands-off: on / off. No other key is involved | nothing |
+| Fn+Ctrl+Option+Cmd (the four keys together) | Dictation mode (never presses Return): on / off. Also turns conversation mode off | nothing |
 | Cmd+Option+V | OpenAI recording | OpenAI key |
 | Space twice / Escape | During OpenAI recording only: stop and transcribe / discard | |
 | Space / Escape | In OpenAI continue mode only: next recording / leave continue mode | |
@@ -254,7 +273,7 @@ swift run TranscribeVideo <file.mp4> # Gemini video transcription
 
 - `Sources/` — the app
   - `main.swift` — app delegate, menu, shortcuts, pasting, screen-recording flow
-  - `ConversationMode.swift` — hands-free mode and the Fn+Ctrl+Option hotkey
+  - `ConversationMode.swift` — conversation and dictation modes and the Fn+Ctrl+Option(+Cmd) hotkey
   - `AppleSpeechManager.swift` — the Apple Speech panel
   - `OpenAIAudioRecordingManager.swift`, `GeminiAudioRecordingManager.swift` — cloud recordings
   - `ScreenRecorder.swift` — ffmpeg screen capture

@@ -67,6 +67,7 @@ struct SettingsView: View {
                     GroupBox(label: Label("Keyboard Shortcuts", systemImage: "keyboard")) {
                         VStack(alignment: .leading, spacing: 8) {
                             ShortcutRow(shortcut: "Fn+Ctrl+Opt", description: "Conversation mode: on / off")
+                            ShortcutRow(shortcut: "Fn+Ctrl+Opt+Cmd", description: "Dictation mode (never presses Return): on / off")
                             ShortcutRow(shortcut: "Cmd+Opt+V", description: "OpenAI audio recording")
                             ShortcutRow(shortcut: "Menu bar", description: "Gemini audio recording")
                             ShortcutRow(shortcut: "Cmd+Opt+S", description: "Read selected text aloud")

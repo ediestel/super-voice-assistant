@@ -8,7 +8,7 @@ Apple Speech panel (on-device dictation), history and settings. Each key adds fe
 
 | Key | Adds |
 |---|---|
-| none | Conversation mode (Fn+Ctrl+Option), dictation mode (Fn+Ctrl+Option+Cmd) and Apple Speech panel, all real-time (words appear as you speak), history, statistics, audio devices |
+| none | Conversation mode (Fn+Ctrl+Option), dictation mode (Fn+Ctrl+Option+Cmd) and Apple Speech panel, all real-time (words appear as you speak), in English or German (Fn+Ctrl+Option+L), history, statistics, audio devices |
 | `OPENAI_API_KEY` | OpenAI transcription (Cmd+Option+V, left-click on the icon), voice commands |
 | `GEMINI_API_KEY` | Read selected text aloud (Cmd+Option+S), screen recording transcription (Cmd+Option+C), Gemini audio recording |
 
@@ -38,14 +38,14 @@ cd super-voice-assistant
 ## 3. Build the app bundle
 
 ```bash
-./scripts/build_app_bundle.sh            # release, universal (arm64 + x86_64)
-# or: ./scripts/build_app_bundle.sh debug
+bash scripts/build_app_bundle.sh         # release, universal (arm64 + x86_64)
+# or: bash scripts/build_app_bundle.sh debug
 ```
 
 The script builds the `SuperVoiceAssistant` product, creates `build/SuperVoiceAssistant.app`
 with its icon and Info.plist (menu-bar app, microphone and speech-recognition descriptions), and
 signs it. If a certificate named **SuperVoice Local Signing** is in your keychain it signs with
-that; otherwise it signs ad hoc.
+that; otherwise it signs ad hoc. API keys are never copied into the bundle (see step 6).
 
 > Ad-hoc signing ties the Accessibility grant to this one build. After every rebuild macOS treats
 > the app as new, and you must remove and re-add it under Accessibility. A self-signed
@@ -54,10 +54,30 @@ that; otherwise it signs ad hoc.
 
 ## 4. Install
 
+Either copy the bundle directly:
+
 ```bash
 cp -R build/SuperVoiceAssistant.app /Applications/
 open /Applications/SuperVoiceAssistant.app
 ```
+
+or build a **DMG installer** and install from it (also the way to hand the app to another Mac):
+
+```bash
+bash scripts/build_dmg.sh             # builds the app bundle, then build/SuperVoiceAssistant-<version>.dmg
+# or: bash scripts/build_dmg.sh --no-build   (packs the existing build/SuperVoiceAssistant.app)
+```
+
+Open the DMG, drag **SuperVoiceAssistant** onto **Applications**, eject the DMG, then start the
+app from Applications or Spotlight. The script refuses to pack a bundle that contains a `.env`
+file, so your API keys never end up in the DMG; each Mac uses its own `~/.env` (step 6).
+
+> **On another Mac.** The DMG and the app are signed with your self-made "SuperVoice Local
+> Signing" certificate, not an Apple Developer ID, and are not notarized, so Gatekeeper blocks
+> the first start ("cannot verify the developer"). Start it once, then System Settings →
+> Privacy & Security → **Open Anyway** for SuperVoiceAssistant. On that Mac, grant the
+> permissions in step 5 again. If `/Applications/SuperVoiceAssistant.app` is a symlink to a
+> project build, remove the symlink before dragging the app in.
 
 What happens on first start:
 
@@ -78,6 +98,7 @@ Open **System Settings → Privacy & Security** and allow:
 | **Microphone** | every recording | macOS asks on the first recording; allow it |
 | **Speech Recognition** | conversation mode, dictation mode, Apple Speech panel | macOS asks on first use; allow it |
 | **Screen Recording** | Cmd+Option+C | Screen & System Audio Recording → add the app (or the terminal when run from source) |
+| **Notifications** | status and error messages (e.g. the new speech language, a missing permission) | macOS asks at the first start; allow it. Later: System Settings → Notifications → SuperVoiceAssistant |
 
 After changing Accessibility, **quit and start the app again**; the shortcuts are registered at
 start.
@@ -109,8 +130,9 @@ chmod 600 ~/.env
 Write only the keys you have. Then quit and start the app again. **Settings** (right-click →
 Settings…) shows each key as *Configured* or *Not configured*.
 
-> The build script copies a project `.env` into `Contents/Resources/` and its closing message
-> suggests creating one there. The app does **not** look in `Contents/Resources`; use `~/.env`.
+> The app does **not** look inside the bundle (`Contents/Resources`), and the build script does
+> not copy a `.env` there. A build in the project's `build/` folder finds the project `.env` by
+> walking up; an app in `/Applications` uses `~/.env`.
 
 ## 7. First test of each feature
 
@@ -121,12 +143,16 @@ Settings…) shows each key as *Configured* or *Not configured*.
    like; Return is never pressed. Either chord turns it off.
 3. **Apple Speech panel (no key):** right-click → **Apple Speech Panel** → **Start** (or ⌘M),
    speak, correct, **⌘Return** to paste into the app you came from.
-4. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **double-tap Space**. The text is
+4. **English / German (no key):** press **Fn+Ctrl+Option+L** (or right-click → **Speech
+   Language**). A notification shows *English* or *Deutsch*; the menu item shows the current
+   language. Start conversation mode and speak in that language. Switching while a mode runs
+   takes effect at once; the panel uses the new language from its next Start.
+5. **OpenAI (key):** cursor in a text field, **Cmd+Option+V**, speak, **double-tap Space**. The text is
    pasted. **Escape** leaves continue mode.
-5. **Read aloud (Gemini key):** select a paragraph, **Cmd+Option+S**. Press again to stop.
-5. **Screen recording (Gemini key + ffmpeg):** **Cmd+Option+C**, talk about what is on screen,
+6. **Read aloud (Gemini key):** select a paragraph, **Cmd+Option+S**. Press again to stop.
+7. **Screen recording (Gemini key + ffmpeg):** **Cmd+Option+C**, talk about what is on screen,
    **Cmd+Option+C** again. The transcript is pasted at the cursor.
-6. **History:** **Cmd+Option+A**.
+8. **History:** **Cmd+Option+A**.
 
 ## 8. Optional settings
 
@@ -174,6 +200,13 @@ Grant Accessibility, Microphone, Speech Recognition and Screen Recording to your
 
 **"Cannot start … another recording is active"**
 - Only one recording at a time. Stop the running one (the menu-bar status shows which).
+
+**German is recognized poorly, or sessions break off after about a minute**
+- The German on-device model is not installed, so macOS uses Apple's servers. Add German in
+  System Settings → Keyboard → Dictation → Languages; once downloaded, recognition runs on the Mac.
+
+**No notifications appear**
+- System Settings → Notifications → SuperVoiceAssistant → Allow Notifications.
 
 **Conversation or dictation mode turned itself off**
 - The microphone input disappeared (device change, sleep/wake). Start it again.

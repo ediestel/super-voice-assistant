@@ -205,6 +205,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         // Debug: Print registered shortcuts
         print("🔧 Shortcuts registered:")
         print("   Fn+Ctrl+Opt: Conversation mode")
+        print("   Fn+Ctrl+Opt+Cmd: Dictation mode")
+        print("   Fn+Ctrl+Opt+L: Speech language (\(SpeechLanguage.current.name))")
         print("   Cmd+Opt+A: History")
         print("   Cmd+Opt+S: TTS")
         print("   Cmd+Opt+C: Screen")
@@ -426,7 +428,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         } else {
             switch currentRecordingState {
             case .idle:
-                tooltip = "Click to start recording\n• fn⌃⌥: Conversation mode (on / send / off)\n• ⌘⌥V: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
+                tooltip = "Click to start recording\n• fn⌃⌥: Conversation mode (on / off)\n• fn⌃⌥⌘: Dictation mode (on / off)\n• fn⌃⌥L: Speech language (English / Deutsch)\n• ⌘⌥V: OpenAI recording\n• ⌘⌥S: Read selected text\n• ⌘⌥C: Screen recording\n• ⌘⌥A: History"
 
             case .starting:
                 let sourceName = currentRecordingSource == .openai ? "OpenAI" : "Gemini"

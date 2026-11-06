@@ -54,13 +54,19 @@ git clone https://github.com/ediestel/super-voice-assistant.git
 cd super-voice-assistant
 
 # Build the app bundle (release, universal) and install it
-./scripts/build_app_bundle.sh
+bash scripts/build_app_bundle.sh
 cp -R build/SuperVoiceAssistant.app /Applications/
 open /Applications/SuperVoiceAssistant.app
+
+# or build a DMG installer: build/SuperVoiceAssistant-<version>.dmg (drag the app onto Applications)
+bash scripts/build_dmg.sh
 ```
 
+The DMG never contains API keys. It is signed with a local certificate, not notarized: on another
+Mac allow the first start under System Settings → Privacy & Security → **Open Anyway**.
+
 Then grant **Accessibility** (needed for the global shortcuts and for pasting), and allow
-**Microphone** and **Speech Recognition** when macOS asks. Optional keys go in `~/.env`:
+**Microphone**, **Speech Recognition** and **Notifications** when macOS asks. Optional keys go in `~/.env`:
 
 ```bash
 # only the lines for the services you want
@@ -279,7 +285,9 @@ swift run TranscribeVideo <file.mp4> # Gemini video transcription
 
 - `Sources/` — the app
   - `main.swift` — app delegate, menu, shortcuts, pasting, screen-recording flow
-  - `ConversationMode.swift` — conversation and dictation modes and the Fn+Ctrl+Option(+Cmd) hotkey
+  - `ConversationMode.swift` — conversation and dictation modes and the Fn+Ctrl+Option(+Cmd / +L) hotkey
+  - `SpeechLanguage.swift` — the English / German setting for Apple Speech
+  - `AppNotification.swift` — banner notifications (UserNotifications)
   - `AppleSpeechManager.swift` — the Apple Speech panel
   - `OpenAIAudioRecordingManager.swift`, `GeminiAudioRecordingManager.swift` — cloud recordings
   - `ScreenRecorder.swift` — ffmpeg screen capture
@@ -294,7 +302,7 @@ swift run TranscribeVideo <file.mp4> # Gemini video transcription
   - `TextInserter.swift`, `VoiceCommandDetector.swift`, `AudioDeviceManager.swift`,
     `AudioSessionManager.swift`, `EnvironmentLoader.swift`
 - `tests/`, `tools/` — the test executables listed above
-- `scripts/` — `build_app_bundle.sh` and icon scripts
+- `scripts/` — `build_app_bundle.sh`, `build_dmg.sh` (DMG installer) and icon scripts
 - `docs/` — voice commands and gestures
 
 ## License

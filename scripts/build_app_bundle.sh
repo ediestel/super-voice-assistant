@@ -138,17 +138,15 @@ EOF
 
 echo -e "${GREEN}✅ Info.plist created${NC}\n"
 
-# Step 6: Copy .env file if exists
-echo -e "${BLUE}Step 6: Copying environment files...${NC}"
-if [ -f "${PROJECT_DIR}/.env" ]; then
-    cp "${PROJECT_DIR}/.env" "${BUNDLE_DIR}/Contents/Resources/.env"
-    echo -e "${GREEN}✅ .env file copied${NC}"
-else
-    echo -e "${YELLOW}⚠️  No .env file found (will need to create one)${NC}"
-fi
+# Step 6: API keys stay out of the bundle
+# The app never reads Contents/Resources/.env: it looks next to the executable and up to
+# five folders above it (so build/ finds the project .env), then ~/.env. Copying the
+# project .env in would only ship your keys inside the bundle and any DMG made from it.
+echo -e "${BLUE}Step 6: API keys...${NC}"
+echo -e "${GREEN}✅ No .env in the bundle (keys are read from ~/.env or the project .env)${NC}"
 echo ""
 
-# Step 7: Code signing (optional, ad-hoc for local use)
+# Step 7: Code signing
 echo -e "${BLUE}Step 7: Code signing...${NC}"
 if command -v codesign &> /dev/null; then
     # A fixed local identity keeps the Accessibility grant across rebuilds; ad-hoc
@@ -158,7 +156,11 @@ if command -v codesign &> /dev/null; then
         SIGN_IDENTITY="SuperVoice Local Signing"
     fi
     codesign --force --deep --sign "${SIGN_IDENTITY}" "${BUNDLE_DIR}"
-    echo -e "${GREEN}✅ App bundle signed (ad-hoc)${NC}"
+    if [ "${SIGN_IDENTITY}" = "-" ]; then
+        echo -e "${GREEN}✅ App bundle signed (ad-hoc)${NC}"
+    else
+        echo -e "${GREEN}✅ App bundle signed (${SIGN_IDENTITY})${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠️  codesign not found, skipping signature${NC}"
 fi
@@ -198,16 +200,14 @@ echo ""
 echo -e "1. ${YELLOW}Copy to Applications:${NC}"
 echo -e "   cp -r \"${BUNDLE_DIR}\" /Applications/"
 echo ""
-echo -e "2. ${YELLOW}Create .env file (if not already present):${NC}"
-echo -e "   Right-click app in Applications → Show Package Contents"
-echo -e "   Navigate to Contents/Resources/"
-echo -e "   Create .env file with your API keys:"
+echo -e "2. ${YELLOW}Optional API keys (OpenAI / Gemini features only) in ~/.env:${NC}"
 echo -e "     GEMINI_API_KEY=your_key_here"
 echo -e "     OPENAI_API_KEY=your_key_here"
 echo ""
 echo -e "3. ${YELLOW}Grant permissions:${NC}"
-echo -e "   System Settings → Privacy & Security → Microphone"
+echo -e "   System Settings → Privacy & Security → Microphone, Speech Recognition"
 echo -e "   System Settings → Privacy & Security → Accessibility"
+echo -e "   Notifications: allow when macOS asks"
 echo ""
 echo -e "4. ${YELLOW}Launch:${NC}"
 echo -e "   Double-click SuperVoiceAssistant.app in Applications"

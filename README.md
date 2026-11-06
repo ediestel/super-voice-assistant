@@ -92,6 +92,7 @@ is on, the icon turns into a filled waveform circle; in dictation mode it is a t
 | Conversation Mode (fn⌃⌥) | Hands-free dictation that sends after a pause: on / off |
 | Dictation Mode (fn⌃⌥⌘) | Hands-free dictation that never presses Return: on / off |
 | Apple Speech Panel | Floating dictation panel |
+| Speech Language: English / Deutsch (fn⌃⌥L) | Switch Apple Speech between English and German |
 | History (⌘⌥A) | Past transcriptions |
 | Settings… / Statistics… | The manager window with its tabs |
 | Test Auto-Paste | Pastes a test text at the cursor, to check the Accessibility grant |
@@ -108,8 +109,12 @@ For talking to a chat window (an LLM, a messenger) without touching the keyboard
 4. Press **Fn+Ctrl+Option** again to turn the mode off ("Pop" sound). This works at any time and
    never presses Return: words not yet sent stay in the field.
 
-Recognition uses Apple Speech in your system language and runs on-device whenever that language
-supports it. If the microphone becomes unavailable (for example while the input device changes
+Recognition uses Apple Speech in **English (en-US)** or **German (de-DE)**: press **Fn+Ctrl+Option+L**
+or use the menu item *Speech Language* to switch (a notification shows the new language). A switch
+while conversation or dictation mode runs takes effect immediately; text already typed stays. The
+Apple Speech panel uses the new language from its next Start. Recognition runs on-device when the
+language's model is installed; otherwise macOS uses Apple's servers (about 1 minute per session).
+For on-device German, add German in System Settings → Keyboard → Dictation → Languages. If the microphone becomes unavailable (for example while the input device changes
 during sleep/wake), the mode turns itself off and shows a notification.
 
 ### Dictation mode — the same, but Return is never pressed
@@ -218,6 +223,7 @@ app is started from Finder or at login.
 |---|---|---|
 | Fn+Ctrl+Option (the three keys together) | Conversation mode, hands-off: on / off. No other key is involved | nothing |
 | Fn+Ctrl+Option+Cmd (the four keys together) | Dictation mode (never presses Return): on / off. Also turns conversation mode off | nothing |
+| Fn+Ctrl+Option+L | Apple Speech language: English ↔ German | nothing |
 | Cmd+Option+V | OpenAI recording | OpenAI key |
 | Space twice / Escape | During OpenAI recording only: stop and transcribe / discard | |
 | Space / Escape | In OpenAI continue mode only: next recording / leave continue mode | |

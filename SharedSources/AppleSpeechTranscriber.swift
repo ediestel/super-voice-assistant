@@ -19,7 +19,7 @@ public final class AppleSpeechTranscriber {
 
     public weak var delegate: AppleSpeechTranscriberDelegate?
 
-    private let speechRecognizer: SFSpeechRecognizer?
+    private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
@@ -27,12 +27,27 @@ public final class AppleSpeechTranscriber {
     private var session = 0
 
     public private(set) var isListening = false
+    /// The language being recognized.
+    public private(set) var locale: Locale
 
     // MARK: Init
 
     public init(locale: Locale = .current) {
-        speechRecognizer = SFSpeechRecognizer(locale: locale)
-        speechRecognizer?.defaultTaskHint = .dictation
+        self.locale = locale
+        speechRecognizer = Self.makeRecognizer(locale)
+    }
+
+    /// Changes the recognition language. Takes effect at the next `startListening()`.
+    public func setLocale(_ locale: Locale) {
+        guard locale.identifier != self.locale.identifier else { return }
+        self.locale = locale
+        speechRecognizer = Self.makeRecognizer(locale)
+    }
+
+    private static func makeRecognizer(_ locale: Locale) -> SFSpeechRecognizer? {
+        let recognizer = SFSpeechRecognizer(locale: locale)
+        recognizer?.defaultTaskHint = .dictation
+        return recognizer
     }
 
     // MARK: Permissions

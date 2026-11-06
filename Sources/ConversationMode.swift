@@ -46,6 +46,13 @@ final class ConversationMode {
     private init() {
         delegateProxy.owner = self
         transcriber.delegate = delegateProxy
+        // A language switch mid-mode restarts the session in the new language; the text
+        // typed so far stays and `didStop` puts a space before the next words.
+        NotificationCenter.default.addObserver(forName: SpeechLanguage.didChange, object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.isActive, self.transcriber.isListening else { return }
+            print("🗣 \(self.mode.name): language switch, restart session")
+            self.transcriber.stopListening()
+        }
     }
 
     // MARK: Hotkey
@@ -93,8 +100,10 @@ final class ConversationMode {
     }
 
     private func listen() {
-        print("🗣 \(mode.name): start session")
+        let language = SpeechLanguage.current
+        print("🗣 \(mode.name): start session (\(language.rawValue))")
         typed = ""
+        transcriber.setLocale(language.locale)
         do {
             try transcriber.startListening()
         } catch {
@@ -171,10 +180,10 @@ final class ConversationMode {
     }
 
     private func notify(_ message: String) {
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "\(mode.name) Mode"
         notification.informativeText = message
-        NSUserNotificationCenter.default.deliver(notification)
+        AppNotificationCenter.default.deliver(notification)
         print("⚠️ \(mode.name) mode: \(message)")
     }
 }
@@ -244,6 +253,9 @@ private enum Keyboard {
 /// Command while the three are held upgrades the chord; releasing it first does not downgrade.
 /// Shift or any ordinary key cancels. The shortcut library can't express modifier-only
 /// combos or Fn.
+///
+/// Fn+⌃⌥ plus a key listed in `keyActions` (e.g. L) runs that key's action instead.
+/// The monitors only observe: the key event still reaches the frontmost app.
 final class FnControlOptionHotkey {
     private let base: NSEvent.ModifierFlags = [.function, .control, .option]
     private let extended: NSEvent.ModifierFlags = [.function, .control, .option, .command]
@@ -253,9 +265,12 @@ final class FnControlOptionHotkey {
     private var spoiled = false
     private var monitors: [Any] = []
     private let action: (_ withCommand: Bool) -> Void
+    /// Virtual key code → action for Fn+⌃⌥+<key>.
+    private let keyActions: [UInt16: () -> Void]
 
-    init(action: @escaping (_ withCommand: Bool) -> Void) {
+    init(keyActions: [UInt16: () -> Void] = [:], action: @escaping (_ withCommand: Bool) -> Void) {
         self.action = action
+        self.keyActions = keyActions
         // Global monitors see other apps' events (needs Accessibility); local ones see ours.
         if let m = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown], handler: { [weak self] in self?.handle($0) }) {
             monitors.append(m)
@@ -269,7 +284,12 @@ final class FnControlOptionHotkey {
 
     private func handle(_ event: NSEvent) {
         if event.type == .keyDown {
-            // Fn+⌃⌥(+⌘)+<key> is someone else's shortcut.
+            if event.modifierFlags.intersection(watched) == base, !event.isARepeat,
+               let keyAction = keyActions[event.keyCode] {
+                print("🔑 Fn+⌃⌥ + key \(event.keyCode)")
+                keyAction()
+            }
+            // Fn+⌃⌥(+⌘)+<key> is a key shortcut, not the conversation/dictation chord.
             if armed != nil { spoiled = true }
             return
         }

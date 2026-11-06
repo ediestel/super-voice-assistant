@@ -31,21 +31,20 @@ public class GeminiAudioCollector {
         AsyncThrowingStream { continuation in
             Task {
                 // Check for concurrent calls
-                self.operationLock.lock()
-                if self.isCollecting {
-                    self.operationLock.unlock()
+                let alreadyCollecting = self.operationLock.withLock { () -> Bool in
+                    if self.isCollecting { return true }
+                    self.isCollecting = true
+                    return false
+                }
+                if alreadyCollecting {
                     let error = GeminiAudioCollectorError.alreadyCollecting
                     onComplete?(.failure(error))
                     continuation.finish(throwing: error)
                     return
                 }
-                self.isCollecting = true
-                self.operationLock.unlock()
 
                 defer {
-                    self.operationLock.lock()
-                    self.isCollecting = false
-                    self.operationLock.unlock()
+                    self.operationLock.withLock { self.isCollecting = false }
                 }
 
                 do {

@@ -136,9 +136,7 @@ public class GeminiStreamingPlayer {
                 try Task.checkCancellation()
 
                 // Check if we're stopping
-                stoppingLock.lock()
-                let stopping = isStopping
-                stoppingLock.unlock()
+                let stopping = stoppingLock.withLock { isStopping }
                 if stopping { break }
 
                 // Wait if we have too many pending buffers (backpressure)
@@ -148,24 +146,22 @@ public class GeminiStreamingPlayer {
                 let buffer = try createPCMBuffer(from: audioChunk)
 
                 // Track pending buffer
-                pendingBufferLock.lock()
-                pendingBufferCount += 1
-                pendingBufferLock.unlock()
+                pendingBufferLock.withLock { pendingBufferCount += 1 }
 
-                playerNodeLock.lock()
-                if isFirstChunk {
-                    playerNode.play()
-                    isFirstChunk = false
-                }
+                playerNodeLock.withLock {
+                    if isFirstChunk {
+                        playerNode.play()
+                        isFirstChunk = false
+                    }
 
-                // Schedule buffer with completion handler for tracking
-                // Use dataPlayedBack for more accurate timing
-                playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                    self?.pendingBufferLock.lock()
-                    self?.pendingBufferCount -= 1
-                    self?.pendingBufferLock.unlock()
+                    // Schedule buffer with completion handler for tracking
+                    // Use dataPlayedBack for more accurate timing
+                    playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                        self?.pendingBufferLock.lock()
+                        self?.pendingBufferCount -= 1
+                        self?.pendingBufferLock.unlock()
+                    }
                 }
-                playerNodeLock.unlock()
 
                 // Adaptive delay based on queue depth
                 let currentPending = getCurrentPendingCount()
@@ -197,9 +193,7 @@ public class GeminiStreamingPlayer {
         while getCurrentPendingCount() >= maxPendingBuffers {
             try Task.checkCancellation()
 
-            stoppingLock.lock()
-            let stopping = isStopping
-            stoppingLock.unlock()
+            let stopping = stoppingLock.withLock { isStopping }
             if stopping { return }
 
             try await Task.sleep(nanoseconds: 10_000_000) // 10ms
@@ -224,9 +218,7 @@ public class GeminiStreamingPlayer {
             }
 
             // Check if we should abort waiting
-            stoppingLock.lock()
-            let stopping = isStopping
-            stoppingLock.unlock()
+            let stopping = stoppingLock.withLock { isStopping }
             if stopping { break }
 
             try Task.checkCancellation()
@@ -283,9 +275,7 @@ public class GeminiStreamingPlayer {
             try Task.checkCancellation()
 
             // Check if we're stopping
-            stoppingLock.lock()
-            let stopping = isStopping
-            stoppingLock.unlock()
+            let stopping = stoppingLock.withLock { isStopping }
             if stopping { break }
 
             // Wait if we have too many pending buffers
@@ -294,23 +284,21 @@ public class GeminiStreamingPlayer {
             let buffer = try createPCMBuffer(from: chunk)
 
             // Track pending buffer
-            pendingBufferLock.lock()
-            pendingBufferCount += 1
-            pendingBufferLock.unlock()
+            pendingBufferLock.withLock { pendingBufferCount += 1 }
 
-            playerNodeLock.lock()
-            if isFirstChunk {
-                playerNode.play()
-                isFirstChunk = false
-            }
+            playerNodeLock.withLock {
+                if isFirstChunk {
+                    playerNode.play()
+                    isFirstChunk = false
+                }
 
-            // Schedule buffer with accurate completion callback
-            playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                self?.pendingBufferLock.lock()
-                self?.pendingBufferCount -= 1
-                self?.pendingBufferLock.unlock()
+                // Schedule buffer with accurate completion callback
+                playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    self?.pendingBufferLock.lock()
+                    self?.pendingBufferCount -= 1
+                    self?.pendingBufferLock.unlock()
+                }
             }
-            playerNodeLock.unlock()
 
             // Adaptive delay based on queue depth
             let currentPending = getCurrentPendingCount()

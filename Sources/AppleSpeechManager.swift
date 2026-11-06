@@ -97,6 +97,7 @@ final class AppleSpeechManager: NSObject, ObservableObject, NSWindowDelegate {
             if authorized {
                 do {
                     self.transcriptionText = ""
+                    self.transcriber?.setLocale(SpeechLanguage.current.locale)
                     try self.transcriber?.startListening()
                 } catch {
                     self.setStatus("⚠️ \(error.localizedDescription)", isError: true)

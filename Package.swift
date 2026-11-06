@@ -81,7 +81,8 @@ let package = Package(
         .executableTarget(
             name: "TestOpenAITranscription",
             dependencies: [],
-            path: "tests/test-openai-transcription"),
+            path: "tests/test-openai-transcription",
+            exclude: ["test-openai"]),  // compiled binary checked in next to main.swift
         .executableTarget(
             name: "TestTextInserter",
             dependencies: ["SharedModels"],

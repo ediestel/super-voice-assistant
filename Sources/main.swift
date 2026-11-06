@@ -8,6 +8,7 @@ import ApplicationServices
 import Foundation
 import CoreGraphics
 import ServiceManagement
+import Carbon.HIToolbox
 
 // Environment variable loading - uses shared EnvironmentLoader
 func loadEnvironmentVariables() {
@@ -61,10 +62,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     private var currentRecordingState: RecordingState = .idle
     private var currentRecordingSource: RecordingSource?
     private var conversationHotkey: FnControlOptionHotkey?
+    private var speechLanguageItem: NSMenuItem?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Line-buffer stdout so logs appear immediately when redirected to a file.
         setvbuf(stdout, nil, _IOLBF, 0)
+        // Ask for notification permission now, not at the first notification.
+        _ = AppNotificationCenter.default
 
         // Runs in the background: menu-bar item only, no Dock icon. Set in code so it
         // takes effect even when LaunchServices has cached an older LSUIElement value.
@@ -165,6 +169,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         appleSpeechItem.target = self
         menu.addItem(appleSpeechItem)
 
+        let languageItem = NSMenuItem(title: "", action: #selector(handleMenuSpeechLanguage), keyEquivalent: "")
+        languageItem.target = self
+        menu.addItem(languageItem)
+        speechLanguageItem = languageItem
+        updateSpeechLanguageItem()
+
         menu.addItem(NSMenuItem.separator())
 
         // Management options
@@ -214,20 +224,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
             // Prevent starting Gemini audio recording if screen recording is active
             if self.screenRecorder.recording {
-                let notification = NSUserNotification()
+                let notification = AppNotification()
                 notification.title = "Cannot Start Gemini Audio Recording"
                 notification.informativeText = "Screen recording is currently active. Stop it first with Cmd+Option+C"
-                NSUserNotificationCenter.default.deliver(notification)
+                AppNotificationCenter.default.deliver(notification)
                 print("⚠️ Blocked Gemini audio recording - screen recording is active")
                 return
             }
 
             // Use state manager for mutual exclusion check
             if !self.stateManager.canStart(source: .gemini) && !self.geminiAudioManager.isRecording {
-                let notification = NSUserNotification()
+                let notification = AppNotification()
                 notification.title = "Cannot Start Gemini Audio Recording"
                 notification.informativeText = "Another recording is currently active"
-                NSUserNotificationCenter.default.deliver(notification)
+                AppNotificationCenter.default.deliver(notification)
                 print("Blocked Gemini audio recording - another recording is active")
                 return
             }
@@ -245,30 +255,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
             // Prevent starting OpenAI audio recording if screen recording is active
             if self.screenRecorder.recording {
-                let notification = NSUserNotification()
+                let notification = AppNotification()
                 notification.title = "Cannot Start OpenAI Audio Recording"
                 notification.informativeText = "Screen recording is currently active. Stop it first with Cmd+Option+C"
-                NSUserNotificationCenter.default.deliver(notification)
+                AppNotificationCenter.default.deliver(notification)
                 print("Blocked OpenAI audio recording - screen recording is active")
                 return
             }
 
             // Prevent starting OpenAI audio recording while Apple Speech is listening
             if AppleSpeechManager.shared.isListening {
-                let notification = NSUserNotification()
+                let notification = AppNotification()
                 notification.title = "Cannot Start OpenAI Audio Recording"
                 notification.informativeText = "Apple Speech is currently listening. Stop it first."
-                NSUserNotificationCenter.default.deliver(notification)
+                AppNotificationCenter.default.deliver(notification)
                 print("Blocked OpenAI audio recording - Apple Speech is active")
                 return
             }
 
             // Use state manager for mutual exclusion check
             if !self.stateManager.canStart(source: .openai) && !self.openaiAudioManager.isRecording {
-                let notification = NSUserNotification()
+                let notification = AppNotification()
                 notification.title = "Cannot Start OpenAI Audio Recording"
                 notification.informativeText = "Another recording is currently active"
-                NSUserNotificationCenter.default.deliver(notification)
+                AppNotificationCenter.default.deliver(notification)
                 print("Blocked OpenAI audio recording - another recording is active")
                 return
             }
@@ -298,8 +308,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             }
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Voice Assistant")
         }
-        conversationHotkey = FnControlOptionHotkey { [weak self] withCommand in
+        // Fn+⌃⌥L: switch Apple Speech between English and German.
+        conversationHotkey = FnControlOptionHotkey(keyActions: [
+            UInt16(kVK_ANSI_L): { SpeechLanguage.toggle() }
+        ]) { [weak self] withCommand in
             self?.toggleConversationMode(withCommand ? .dictation : .conversation)
+        }
+        NotificationCenter.default.addObserver(forName: SpeechLanguage.didChange, object: nil, queue: .main) { [weak self] _ in
+            self?.updateSpeechLanguageItem()
+            let language = SpeechLanguage.current
+            NSSound(named: language == .german ? "Morse" : "Purr")?.play()
+            let notification = AppNotification()
+            notification.title = "Speech Language"
+            notification.informativeText = language.name
+            AppNotificationCenter.default.deliver(notification)
         }
 
         // Set up Gemini audio manager
@@ -466,10 +488,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
     @objc func handleMenuGeminiRecording() {
         if !stateManager.canStart(source: .gemini) && !geminiAudioManager.isRecording {
-            let notification = NSUserNotification()
+            let notification = AppNotification()
             notification.title = "Cannot Start Gemini Recording"
             notification.informativeText = "Another recording is currently active"
-            NSUserNotificationCenter.default.deliver(notification)
+            AppNotificationCenter.default.deliver(notification)
             return
         }
 
@@ -505,15 +527,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         toggleConversationMode(.dictation)
     }
 
+    /// Menu / Fn+⌃⌥L: switch Apple Speech between English and German.
+    @objc func handleMenuSpeechLanguage() {
+        SpeechLanguage.toggle()
+    }
+
+    private func updateSpeechLanguageItem() {
+        speechLanguageItem?.title = "Speech Language: \(SpeechLanguage.current.name) (fn⌃⌥L)"
+    }
+
     /// Fn+⌃⌥ / Fn+⌃⌥⌘ / menu: turn the running mode off, or start `mode`.
     private func toggleConversationMode(_ mode: ConversationMode.Mode) {
         let conversation = ConversationMode.shared
         // Mutual exclusion: don't grab the mic while another recorder is active.
         if !conversation.isActive && (screenRecorder.recording || openaiAudioManager.isRecording || geminiAudioManager.isRecording) {
-            let notification = NSUserNotification()
+            let notification = AppNotification()
             notification.title = "Cannot Start \(mode.name) Mode"
             notification.informativeText = "Another recording is currently active. Stop it first."
-            NSUserNotificationCenter.default.deliver(notification)
+            AppNotificationCenter.default.deliver(notification)
             print("⚠️ Blocked \(mode.name.lowercased()) mode - another recording is active")
             return
         }
@@ -574,20 +605,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
     func toggleScreenRecording() {
         // Prevent starting screen recording if Gemini audio recording is active
         if !screenRecorder.recording && geminiAudioManager.isRecording {
-            let notification = NSUserNotification()
+            let notification = AppNotification()
             notification.title = "Cannot Start Screen Recording"
             notification.informativeText = "Gemini audio recording is currently active. Stop it first with Cmd+Option+X"
-            NSUserNotificationCenter.default.deliver(notification)
+            AppNotificationCenter.default.deliver(notification)
             print("Blocked screen recording - Gemini audio recording is active")
             return
         }
 
         // Prevent starting screen recording if OpenAI audio recording is active
         if !screenRecorder.recording && openaiAudioManager.isRecording {
-            let notification = NSUserNotification()
+            let notification = AppNotification()
             notification.title = "Cannot Start Screen Recording"
             notification.informativeText = "OpenAI audio recording is currently active. Stop it first with Cmd+Option+V"
-            NSUserNotificationCenter.default.deliver(notification)
+            AppNotificationCenter.default.deliver(notification)
             print("Blocked screen recording - OpenAI audio recording is active")
             return
         }
@@ -632,11 +663,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                                 }
 
                                 // Show completion notification with transcription
-                                let completionNotification = NSUserNotification()
+                                let completionNotification = AppNotification()
                                 completionNotification.title = "Video Transcribed"
                                 completionNotification.informativeText = transcription.prefix(100) + (transcription.count > 100 ? "..." : "")
                                 completionNotification.subtitle = "Pasted at cursor"
-                                NSUserNotificationCenter.default.deliver(completionNotification)
+                                AppNotificationCenter.default.deliver(completionNotification)
 
                                 print("✅ Transcription complete:")
                                 print("─────────────────")
@@ -645,10 +676,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
                             case .failure(let error):
                                 // Show error notification
-                                let errorNotification = NSUserNotification()
+                                let errorNotification = AppNotification()
                                 errorNotification.title = "Transcription Failed"
                                 errorNotification.informativeText = error.localizedDescription
-                                NSUserNotificationCenter.default.deliver(errorNotification)
+                                AppNotificationCenter.default.deliver(errorNotification)
 
                                 print("❌ Transcription failed: \(error.localizedDescription)")
                             }
@@ -658,10 +689,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                 case .failure(let error):
                     print("❌ Screen recording failed: \(error.localizedDescription)")
 
-                    let errorNotification = NSUserNotification()
+                    let errorNotification = AppNotification()
                     errorNotification.title = "Recording Failed"
                     errorNotification.informativeText = error.localizedDescription
-                    NSUserNotificationCenter.default.deliver(errorNotification)
+                    AppNotificationCenter.default.deliver(errorNotification)
 
                     // Reset status bar
                     self.stopBlinking()
@@ -674,10 +705,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             }
 
             // Show stopping notification
-            let notification = NSUserNotification()
+            let notification = AppNotification()
             notification.title = "Screen Recording Stopped"
             notification.informativeText = "Saving video..."
-            NSUserNotificationCenter.default.deliver(notification)
+            AppNotificationCenter.default.deliver(notification)
             print("⏹️ Screen recording STOPPED")
 
         } else {
@@ -693,19 +724,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                     self.updateScreenRecordingIndicator()
 
                     // Show success notification
-                    let notification = NSUserNotification()
+                    let notification = AppNotification()
                     notification.title = "Screen Recording Started"
                     notification.informativeText = "Press Cmd+Option+C again to stop or click menubar"
-                    NSUserNotificationCenter.default.deliver(notification)
+                    AppNotificationCenter.default.deliver(notification)
                     print("🎥 Screen recording STARTED")
 
                 case .failure(let error):
                     print("❌ Failed to start recording: \(error.localizedDescription)")
 
-                    let errorNotification = NSUserNotification()
+                    let errorNotification = AppNotification()
                     errorNotification.title = "Recording Failed"
                     errorNotification.informativeText = error.localizedDescription
-                    NSUserNotificationCenter.default.deliver(errorNotification)
+                    AppNotificationCenter.default.deliver(errorNotification)
                 }
             }
         }
@@ -724,10 +755,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         // Reset playing state
         isCurrentlyPlaying = false
         
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "Audio Stopped"
         notification.informativeText = "Text-to-speech playback stopped"
-        NSUserNotificationCenter.default.deliver(notification)
+        AppNotificationCenter.default.deliver(notification)
     }
     
     func readSelectedText() {
@@ -769,13 +800,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                 // Try to stream speech with our streaming components
                 if let audioCollector = self?.audioCollector, let streamingPlayer = self?.streamingPlayer {
                     self?.isCurrentlyPlaying = true
-                    
+                    // Immutable copy for the restore below, which runs from the Task.
+                    let itemsToRestore = savedItems
+
                     self?.currentStreamingTask = Task {
                         do {
-                            let notification = NSUserNotification()
+                            let notification = AppNotification()
                             notification.title = "Streaming TTS"
                             notification.informativeText = "Starting streaming synthesis: \(copiedText.prefix(50))\(copiedText.count > 50 ? "..." : "")"
-                            NSUserNotificationCenter.default.deliver(notification)
+                            AppNotificationCenter.default.deliver(notification)
                             
                             // Stream audio using single API call for all text at once
                             try await streamingPlayer.playText(copiedText, audioCollector: audioCollector)
@@ -785,26 +818,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                                 return
                             }
                             
-                            let completionNotification = NSUserNotification()
+                            let completionNotification = AppNotification()
                             completionNotification.title = "Streaming TTS Complete"
                             completionNotification.informativeText = "Finished streaming selected text"
-                            NSUserNotificationCenter.default.deliver(completionNotification)
+                            AppNotificationCenter.default.deliver(completionNotification)
                             
                         } catch is CancellationError {
                             print("🛑 Audio streaming was cancelled")
                         } catch {
                             print("❌ Streaming TTS Error: \(error)")
                             
-                            let errorNotification = NSUserNotification()
+                            let errorNotification = AppNotification()
                             errorNotification.title = "Streaming TTS Error"
                             errorNotification.informativeText = "Failed to stream text: \(error.localizedDescription)"
-                            NSUserNotificationCenter.default.deliver(errorNotification)
+                            AppNotificationCenter.default.deliver(errorNotification)
                             
                             // Note: Text is already in clipboard from Cmd+C, no need to copy again
-                            let fallbackNotification = NSUserNotification()
+                            let fallbackNotification = AppNotification()
                             fallbackNotification.title = "Text Ready in Clipboard"
                             fallbackNotification.informativeText = "Streaming failed, selected text copied via Cmd+C"
-                            NSUserNotificationCenter.default.deliver(fallbackNotification)
+                            AppNotificationCenter.default.deliver(fallbackNotification)
                         }
                         
                         // Reset playing state when task completes (normally or via cancellation)
@@ -815,28 +848,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
                         
                         // Restore original clipboard contents after streaming
                         DispatchQueue.main.async {
+                            let pasteboard = NSPasteboard.general
                             pasteboard.clearContents()
-                            for (type, data) in savedItems {
+                            for (type, data) in itemsToRestore {
                                 pasteboard.setData(data, forType: type)
                             }
                             print("♻️ Restored original clipboard contents")
                         }
                     }
                 } else {
-                    let notification = NSUserNotification()
+                    let notification = AppNotification()
                     notification.title = "Selected Text Copied"
                     notification.informativeText = "Streaming TTS not available, text copied to clipboard: \(copiedText.prefix(100))\(copiedText.count > 100 ? "..." : "")"
-                    NSUserNotificationCenter.default.deliver(notification)
+                    AppNotificationCenter.default.deliver(notification)
                     
                     // Don't restore clipboard in this case since user might want the copied text
                 }
             } else {
                 print("⚠️ No text was copied - nothing selected or copy failed")
                 
-                let notification = NSUserNotification()
+                let notification = AppNotification()
                 notification.title = "No Text Selected"
                 notification.informativeText = "Please select some text first before using TTS"
-                NSUserNotificationCenter.default.deliver(notification)
+                AppNotificationCenter.default.deliver(notification)
                 
                 // Restore clipboard since copy attempt failed
                 pasteboard.clearContents()
@@ -894,20 +928,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
 
     
     func showTranscriptionNotification(_ text: String) {
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "Transcription Complete"
         notification.informativeText = text
         notification.subtitle = "Pasted at cursor"
-        notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+        notification.soundName = AppNotification.defaultSoundName
+        AppNotificationCenter.default.deliver(notification)
     }
     
     func showTranscriptionError(_ message: String) {
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "Transcription Error"
         notification.informativeText = message
-        notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+        notification.soundName = AppNotification.defaultSoundName
+        AppNotificationCenter.default.deliver(notification)
     }
     
     func pasteTextAtCursor(_ text: String) {
@@ -935,7 +969,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
            target.processIdentifier != NSRunningApplication.current.processIdentifier,
            !target.isActive {
             print("🎯 Re-activating target app before paste: \(target.localizedName ?? "nil")")
-            target.activate(options: .activateIgnoringOtherApps)
+            target.activate(options: [])
             // Defer so the target app is frontmost and owns the focused element.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 self?.performPaste(text)
@@ -1043,7 +1077,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
         print("🎯 Target app: \(targetApp?.localizedName ?? "nil") (bundleID: \(targetApp?.bundleIdentifier ?? "nil"))")
         if let targetApp, !targetApp.isActive {
             print("🎯 Activating target app...")
-            targetApp.activate(options: .activateIgnoringOtherApps)
+            targetApp.activate(options: [])
             usleep(150000) // 150ms - give app time to activate
         }
 
@@ -1130,10 +1164,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             button.title = ""
         }
 
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "Recording Cancelled"
         notification.informativeText = "Recording was cancelled"
-        NSUserNotificationCenter.default.deliver(notification)
+        AppNotificationCenter.default.deliver(notification)
     }
 
     func recordingWasSkippedDueToSilence() {
@@ -1143,10 +1177,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             button.title = ""
         }
 
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "Recording Skipped"
         notification.informativeText = "Audio was too quiet to transcribe"
-        NSUserNotificationCenter.default.deliver(notification)
+        AppNotificationCenter.default.deliver(notification)
     }
 
     // MARK: - OpenAIAudioRecordingManagerDelegate
@@ -1183,10 +1217,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             button.title = ""
         }
 
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "OpenAI Recording Cancelled"
         notification.informativeText = "Recording was cancelled"
-        NSUserNotificationCenter.default.deliver(notification)
+        AppNotificationCenter.default.deliver(notification)
     }
 
     func openAIRecordingWasSkippedDueToSilence() {
@@ -1196,10 +1230,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, GeminiAudioRecordingManagerD
             button.title = ""
         }
 
-        let notification = NSUserNotification()
+        let notification = AppNotification()
         notification.title = "Recording Skipped"
         notification.informativeText = "Audio was too quiet to transcribe"
-        NSUserNotificationCenter.default.deliver(notification)
+        AppNotificationCenter.default.deliver(notification)
     }
 
 }

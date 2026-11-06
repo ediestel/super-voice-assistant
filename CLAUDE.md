@@ -54,7 +54,7 @@
 - `removeVoiceCommandsFromTranscription` reads false until toggled once (AppStorage default is not registered)
 - Gestures use NSEvent local monitoring (work when app is active)
 - Both integrate seamlessly with existing keyboard shortcuts
-- Settings stored in UserDefaults (voiceCommandsEnabled, gestureControlsEnabled)
+- Settings stored in UserDefaults (voiceCommandsEnabled, gestureControlsEnabled, speechLanguage = en-US | de-DE for Apple Speech, toggled with Fn+⌃⌥L)
 
 ## Completed Features
 

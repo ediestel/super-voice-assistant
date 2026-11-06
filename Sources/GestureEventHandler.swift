@@ -166,7 +166,7 @@ extension GestureEventHandler {
     /// Uses scroll wheel events to detect two-finger swipes
     public func enableMagicMouseGestures() {
         // Monitor scroll events that could be Magic Mouse swipes
-        let scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
+        _ = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
             // Magic Mouse swipes generate high delta values
             if event.momentumPhase == .began {
                 let deltaY = event.scrollingDeltaY

@@ -218,9 +218,7 @@ public class OpenAIRealtimeTranscriber {
         }
 
         // Backpressure: check if we have too many pending sends
-        pendingSendLock.lock()
-        let currentPending = pendingSendCount
-        pendingSendLock.unlock()
+        let currentPending = pendingSendLock.withLock { pendingSendCount }
 
         if currentPending >= maxPendingSends {
             debugLog("⚠️ Backpressure: dropping audio chunk (\(currentPending) pending)")
@@ -238,22 +236,16 @@ public class OpenAIRealtimeTranscriber {
         let jsonString = String(data: jsonData, encoding: .utf8)!
 
         // Track pending send
-        pendingSendLock.lock()
-        pendingSendCount += 1
-        pendingSendLock.unlock()
+        pendingSendLock.withLock { pendingSendCount += 1 }
 
         do {
             try await webSocketTask.send(.string(jsonString))
         } catch {
-            pendingSendLock.lock()
-            pendingSendCount -= 1
-            pendingSendLock.unlock()
+            pendingSendLock.withLock { pendingSendCount -= 1 }
             throw error
         }
 
-        pendingSendLock.lock()
-        pendingSendCount -= 1
-        pendingSendLock.unlock()
+        pendingSendLock.withLock { pendingSendCount -= 1 }
         // NOTE: Per-chunk logging removed to prevent disk space exhaustion
         // (was logging ~100 chunks/second during recording)
     }
